@@ -3,17 +3,16 @@
 # Author: Weimin Liu wliu@marum.de
 
 import concurrent
-import math
-
 import pandas as pd
 import tqdm
 import numpy as np
+from mfe import create_feature_table
+from mfe.src.util.accurate_mz import get_accmz
 
 # TODO:
 #  - Add a class to perform lock mass calibration with multiple calibrates at the same time
 #  - Add a class to calibrate time-based mass-to-charge ratio drift
-from mfe import create_feature_table
-from mfe.src.util.accurate_mz import get_accmz
+
 
 
 def suggest_calibrates(min_mz, max_mz, raw_txt_path, msi: dict, bin_width=0.01):
@@ -24,9 +23,11 @@ def suggest_calibrates(min_mz, max_mz, raw_txt_path, msi: dict, bin_width=0.01):
 
         bin_width: the width of mass bins in order to look for the most abudant compounds, default is 0.01
 
-
-
     Returns:
+
+        acc_candidate_mzs: a list of mass-to-charge ratios widely occurred in the slide
+
+        candidate_dist: kernel density estimated distribution of the mass-to-charge ratios of those candidates
 
 
     """
