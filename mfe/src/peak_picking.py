@@ -190,15 +190,13 @@ def cal_structure_score(image, q=4):
     return score
 
 
-def get_peak_ranks(feature_table_path):
+def get_peak_ranks(feature_table: pd.DataFrame):
     """
     This is an example of how to get structued ion image from feature table.
 
     Parameters:
 
-        feature_table_path: path to the feature table
-
-        score_threshold: the threshold for preserving structured ra
+        feature_table: a DataFrame object
 
     Returns:
 
@@ -208,7 +206,7 @@ def get_peak_ranks(feature_table_path):
 
     """
 
-    dirty_df = pd.read_csv(feature_table_path)
+    dirty_df = feature_table
 
     dirty_df = dirty_df.iloc[:, 1:]
 
@@ -220,7 +218,7 @@ def get_peak_ranks(feature_table_path):
     mzs = np.array([float(mz) for mz in mzs])
 
     t = dict()
-    selected_mz = list()
+
     deflated_arr = list()
 
     for mz in tqdm.tqdm(list(mzs)):
@@ -234,6 +232,7 @@ def get_peak_ranks(feature_table_path):
         # image = interpolate_missing_pixels(image)
 
         q = 4
+
         score = cal_structure_score(image, q)
 
         deflated_arr.append(image)
@@ -243,6 +242,38 @@ def get_peak_ranks(feature_table_path):
     t_df = pd.DataFrame.from_dict(t, orient='index')
 
     return t_df, deflated_arr
+
+
+def sel_peak_by_rank(t_df, feature_table: pd.DataFrame, threshold):
+    """
+    Select the structured peaks (thus more meaningful) in the feature table and return the result
+
+    Parameters:
+    --------
+        t_df: a DataFrame object with ranked mass-to-charge ratios
+
+        feature_table: a Dataframe object
+
+        threshold: above which the peaks will be preserved
+
+    Returns:
+    --------
+        feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
+
+    """
+
+    t_df = t_df[t_df >= threshold]
+
+    sel_mzs = list(t_df.index)
+
+    sel_mzs.extend(['x', 'y'])
+
+    sel_columns = [col for col in feature_table.columns() if col in sel_mzs]
+
+    feature_table_picked = feature_table[sel_columns]
+
+    return feature_table_picked
+
 
 
 

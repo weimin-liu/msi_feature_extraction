@@ -53,8 +53,13 @@ from mfe.peak_picking import get_peak_ranks
 
 t_df, deflated_arr = get_peak_ranks(feature_table)
 ````
-The result contains the ranked peaks with its corresponding ion image, manual examination is needed to decide a threshold above which the peaks are preserved.
+The result contains the ranked peaks with its corresponding ion image, manual examination is needed to decide a threshold (`th`) above which the peaks are preserved.
  
+````
+from mfe.peak_picking import sel_peak_by_rank
+
+feature_table = sel_peak_by_rank(t_df, feature_table, th)
+````
 ### Feature extraction using non-negative matrix factorization
 
 ````
