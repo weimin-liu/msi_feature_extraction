@@ -7,15 +7,16 @@ import pandas as pd
 import tqdm
 import numpy as np
 from mfe import create_feature_table
+from mfe.src.from_txt import msi_from_txt
 from mfe.src.util.accurate_mz import get_accmz
+
 
 # TODO:
 #  - Add a class to perform lock mass calibration with multiple calibrates at the same time
 #  - Add a class to calibrate time-based mass-to-charge ratio drift
 
 
-
-def suggest_calibrates(min_mz, max_mz, raw_txt_path, msi: dict, bin_width=0.01):
+def suggest_calibrates(raw_txt_path, bin_width=0.01):
     """
     Parameters:
 
@@ -32,9 +33,9 @@ def suggest_calibrates(min_mz, max_mz, raw_txt_path, msi: dict, bin_width=0.01):
 
     """
 
-    # Todo: function to get the min and max mass-to-charge ratio
+    msi = msi_from_txt(raw_txt_path)
 
-    spot, mzs, result_arr = create_feature_table(min_mz, max_mz, bin_width, msi)
+    spot, mzs, result_arr = create_feature_table(bin_width, msi)
 
     result_arr = result_arr.toarray()
 
@@ -180,11 +181,3 @@ class SimpleFallbackCalibrate:
     def fit_transform(self, msi: dict, calibrates: list, tol=10):
         self.fit(msi, calibrates, tol)
         self.transform()
-
-
-
-
-
-
-
-

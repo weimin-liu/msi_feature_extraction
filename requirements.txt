@@ -8,3 +8,5 @@ setuptools==58.5.3
 tqdm==4.62.3
 
 scikit-image~=0.17.2
+networkx~=2.6.3
+nimfa~=1.4.0

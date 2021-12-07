@@ -2,6 +2,7 @@ import concurrent
 import functools
 import re
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from KDEpy import FFTKDE
 
@@ -24,7 +25,7 @@ def parse_line(line):
 
 
 def extract_from_single_line(mz: float or list, bin_size, line):
-    _, mzs, intensity = parse_line(line)
+    spot, mzs, intensity = parse_line(line)
 
     result = list()
 
@@ -34,13 +35,13 @@ def extract_from_single_line(mz: float or list, bin_size, line):
             intensity0 = intensity[mask]
             mzs0 = mzs[mask]
             if len(intensity0) != 0:
-                result.append([mzs0[np.argmax(intensity0)].round(5), intensity0[np.argmax(intensity0)], m])
+                result.append([spot, mzs0[np.argmax(intensity0)].round(5), intensity0[np.argmax(intensity0)], m])
     except TypeError:
         mask = (mzs >= (mz - bin_size / 2)) & (mzs < (mz + bin_size / 2))
         intensity = intensity[mask]
         mzs = mzs[mask]
         if len(mzs) != 0:
-            result.append([mzs[np.argmax(intensity)].round(5), intensity[np.argmax(intensity)], mz])
+            result.append([spot, mzs[np.argmax(intensity)].round(5), intensity[np.argmax(intensity)], mz])
     return result
 
 
@@ -56,7 +57,7 @@ def get_accmz(txt_path, mzs, bin_size=0.01):
     with concurrent.futures.ProcessPoolExecutor() as executor:
         peaks = list(tqdm(executor.map(f, raw), total=len(raw)))
 
-    peaks = [item for sublist in peaks for item in sublist]
+    peaks = [item[1:] for sublist in peaks for item in sublist]
     peaks = np.array(peaks)
 
     candidate_dict = dict()
@@ -73,3 +74,17 @@ def get_accmz(txt_path, mzs, bin_size=0.01):
         candidate_dist[mz] = np.stack((x, y))
     return dict(zip(mzs, center_mzs)), candidate_dist
 
+
+def get_accurate_intensity(path, center_mzs, tol=0.004):
+    with open(path, 'r') as f:
+        raw = f.readlines()
+    f = functools.partial(extract_from_single_line, center_mzs, tol)
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        peaks = list(tqdm(executor.map(f, raw), total=len(raw)))
+
+    peaks = [item for sublist in peaks for item in sublist]
+
+    data = pd.DataFrame(peaks)
+    data = pd.pivot_table(data, values=2, index=0, columns=3)
+    return data

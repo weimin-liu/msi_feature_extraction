@@ -6,6 +6,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.interpolate import griddata
 from sklearn.preprocessing import MaxAbsScaler
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def grid_data(x, y, z, interp=False):
@@ -52,4 +53,11 @@ def show_kmeans(spot, features, n_clusters=3, *args, **kwargs):
     fig.colorbar(im, ax=ax)
     plt.show()
     return kmeans
+
+
+def discrete_cmap(N, base_cmap=None):
+    base = plt.cm.get_cmap(base_cmap)
+    color_list = base(np.linspace(0, 1, N))
+    cmap_name = base.name + str(N)
+    return LinearSegmentedColormap.from_list(cmap_name, color_list, N)
 

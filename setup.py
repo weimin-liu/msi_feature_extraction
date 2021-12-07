@@ -4,7 +4,7 @@ setup(
     name='mfe',
     version='0.0.1',
     install_requires=['numpy', 'pandas', 'matplotlib', 'scipy', 'scikit-learn'],
-    packages=['mfe.src.util', 'mfe.src.vis'],
+    packages=['mfe.src.util', 'mfe.src.Visualization'],
     url='https://github.com/weimin-liu/msi_feature_extraction',
     license='MIT License',
     author='Weimin Liu',

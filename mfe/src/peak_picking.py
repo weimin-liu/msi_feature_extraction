@@ -3,7 +3,6 @@ import numpy as np
 import tqdm
 from skimage.feature.texture import greycomatrix
 from scipy import interpolate
-from skimage.transform import rotate
 from skimage import exposure
 
 # === The matrix used to calculate texture score === #
@@ -86,14 +85,16 @@ def de_flatten(coordinates: np.ndarray, peaks: np.ndarray):
     """
     x_location = coordinates[:, 0].astype(int)
     y_location = coordinates[:, 1].astype(int)
-    x_location = x_location - min(x_location)
-    y_location = y_location - min(y_location)
+    min_x = min(x_location)
+    min_y = min(y_location)
+    x_location = x_location - min_x
+    y_location = y_location - min_y
     col = max(np.unique(x_location))
     row = max(np.unique(y_location))
-    im = np.zeros((col, row))
+    im = np.zeros((col + 1, row + 1))
     im[:] = np.nan
     for i in range(len(x_location)):
-        im[np.asscalar(x_location[i]) - 1, np.asscalar(y_location[i] - 1)] = peaks[i]
+        im[x_location[i], y_location[i]] = peaks[i]
     return im
 
 
@@ -111,13 +112,16 @@ def remove_whitespace(image: np.ndarray):
         image array that is correctly rotated with whitespace removed
     """
 
-    image = rotate(image, angle=-2, mode='wrap')
+    # image = rotate(image, angle=-2, mode='wrap')
+    #
+    # whitespace_col = 1 - np.count_nonzero(np.isnan(image), axis=0) / len(image)
+    # image = image[:, 4:40]
+    #
+    # whitespace_row = 1 - np.count_nonzero(np.isnan(image), axis=1) / len(image.T)
+    # image = image[4:249]
 
-    whitespace_col = 1 - np.count_nonzero(np.isnan(image), axis=0) / len(image)
-    image = image[:, 4:40]
-
-    whitespace_row = 1 - np.count_nonzero(np.isnan(image), axis=1) / len(image.T)
-    image = image[4:249]
+    # ideal for the 0-5cm slice, only cut out the whitespace without rotation, to avoid any false interpolation
+    image = image[26:235, 3:-5]
 
     return image
 
@@ -154,33 +158,39 @@ def cal_structure_score(image, q=4):
         q: in order to get a more fair structure score, for each ion image, their intensities are evenly divided into
         bins with a number of q, and the intensities are then replaced with the label (integer number). Currently,
         q is fixed to 4 for the convenience of the following structure score calculation.
-        # TODO: ion image that cannot be quantized into 4 parts will be threw away, further examination may be required.
 
     Returns:
 
         The structure score of the image. The higher the score, the more structured the ion image.
 
     """
+    nan_flg = False
     df = pd.DataFrame(image.reshape(-1, 1))
+    n_spots = np.count_nonzero(df[0].to_numpy())
     q = q
     bin_labels = list(range(q))
     try:
+        if df[0].min() == 0:
+            df = df.replace(0, np.nan)
+            nan_flg = True
         df['quantile_ex_1'] = pd.qcut(df[0], q=q, labels=bin_labels, duplicates='drop')
         im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
-        gcm = greycomatrix(im_quantized, [1], [3 * np.pi / 4], levels=q)[:, :, 0, 0]
-        score = np.sum(np.multiply(gcm, C4))
+        im_quantized[np.isnan(im_quantized)] = q
+        im_quantized = im_quantized.astype(int)
+        if nan_flg:
+            gcm = greycomatrix(im_quantized, [1], [3 * np.pi / 4], levels=q+1)[:, :, 0, 0]
+            gcm = gcm[0:-1, 0:-1]
+        else:
+            gcm = greycomatrix(im_quantized, [1], [3 * np.pi / 4], levels=q)[:, :, 0, 0]
+        score = np.sum(np.multiply(gcm, C4)) / n_spots
 
     except ValueError:
         score = 0
-        # df['quantile_ex_1'] = pd.qcut(df[0], q=q, duplicates='drop')
-        # q = len(df['quantile_ex_1'].unique())
-        # bin_labels = list(range(q))
-        # df['quantile_ex_1'] = pd.qcut(df[0], q=q, labels=bin_labels, duplicates='drop')
 
     return score
 
 
-def main(feature_table_path=None, score_threshold=6000):
+def get_peak_ranks(feature_table_path):
     """
     This is an example of how to get structued ion image from feature table.
 
@@ -196,14 +206,10 @@ def main(feature_table_path=None, score_threshold=6000):
 
         deflated_arr: a 3d array with ion image ravelled
 
-        selected_mz: the list of mzs that have structured images.
     """
-    if feature_table_path is None:
-        feature_table_path = "../../../examples/SBB5-10cm_mz520-580.csv"
-    else:
-        feature_table_path = feature_table_path
 
     dirty_df = pd.read_csv(feature_table_path)
+
     dirty_df = dirty_df.iloc[:, 1:]
 
     spot = dirty_df[['x', 'y']].to_numpy()
@@ -220,20 +226,23 @@ def main(feature_table_path=None, score_threshold=6000):
     for mz in tqdm.tqdm(list(mzs)):
         test = arr[:, mzs == mz]
         image = de_flatten(spot, test)
-        image = remove_whitespace(image)
-        image = interpolate_missing_pixels(image)
+
         image = contrast_stretching(image)
+
+        image = remove_whitespace(image)
+
+        # image = interpolate_missing_pixels(image)
+
         q = 4
         score = cal_structure_score(image, q)
-        if score >= score_threshold:
-            selected_mz.append(mz)
-            deflated_arr.append(image)
-            t[mz] = score
+
+        deflated_arr.append(image)
+
+        t[mz] = score
+
     t_df = pd.DataFrame.from_dict(t, orient='index')
-    return t_df, deflated_arr, selected_mz
+
+    return t_df, deflated_arr
 
 
-if __name__ == "__main__":
-    structure_score, im, mzs = main()
-    im_f = [arr.flatten() for arr in im]
-    im_f = np.array(im_f)
+

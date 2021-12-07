@@ -1,5 +1,4 @@
-from mfe.src.vis.cluster import show_kmeans
-
+from mfe.src.util.cluster import show_kmeans
 
 
 def remove_abnormal_areas(spot, features):
@@ -12,4 +11,3 @@ def remove_abnormal_areas(spot, features):
             spot = spot[kmeans.labels_ != label]
             features = features[kmeans.labels_ != label]
             return spot, features
-
