@@ -35,7 +35,6 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     """
 
     if (str_x is None) & (str_y is None):
-        print(r'Regex for extracting coordinates was not set, fallback to the default (e.g., R00X01Y01)')
 
         str_x = r'R00X(.*?)Y'
 
@@ -59,7 +58,7 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     y = int(y)
 
-    return [x, y], spectrum
+    return (x, y), spectrum
 
 
 def msi_from_txt(raw_txt_path: str) -> dict:
