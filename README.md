@@ -63,7 +63,7 @@ feature_table, ims = sel_peak_by_rank(t_df, deflated_arr, feature_table, th)
 ### Feature extraction using non-negative matrix factorization
 
 ````python
-from mfe.feature import rank_estimate
+from mfe.feature import rank_estimate, nmf
 
 # first detect the appropriate rank for the data, the list of images are used here instead of the feature table, because the images have already been normalized with quantiles removed.
 rank_candidates = list(range(2, 20))
