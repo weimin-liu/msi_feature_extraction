@@ -6,6 +6,9 @@ import tqdm
 import numpy as np
 import pandas as pd
 from bisect import bisect
+
+from KDEpy import FFTKDE
+from scipy import signal
 from scipy.sparse import vstack, csr_matrix
 
 from mfe.src.util.Spectrum import Spectrum
@@ -35,7 +38,6 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     """
 
     if (str_x is None) & (str_y is None):
-
         str_x = r'R00X(.*?)Y'
 
         str_y = r'Y(.*?)$'
@@ -87,7 +89,6 @@ def msi_from_txt(raw_txt_path: str) -> dict:
         to_do = []
 
         for line in lines:
-
             future = executor.submit(parse_da_export, line)
 
             to_do.append(future)
@@ -99,7 +100,6 @@ def msi_from_txt(raw_txt_path: str) -> dict:
         results = dict()
 
         for future in done_iter:
-
             res = future.result()
 
             results[res[0]] = res[1]
@@ -138,7 +138,7 @@ def combine_spectrum(spot: list, spectrum: Spectrum, primer_df: pd.DataFrame):
     return spot, csr_matrix(df.to_numpy().flatten())
 
 
-def binize(spot: list, spectrum: Spectrum, mzbin, mzbin_precision):
+def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
     """
     function to bin a spectrum, the maximum peak in the binned area is used
 
@@ -163,31 +163,92 @@ def binize(spot: list, spectrum: Spectrum, mzbin, mzbin_precision):
 
     for mz in spectrum.mz_values:
 
-        idx = bisect(mzbin, mz)
+        if mz < np.max(ref_peaks):
 
-        if abs(mzbin[idx - 1] - mz) < abs(mzbin[idx] - mz):
+            idx = bisect(ref_peaks, mz)
 
-            new_mz = mzbin[idx - 1]
+            if abs(ref_peaks[idx - 1] - mz) < abs(ref_peaks[idx] - mz):
+
+                new_mz = ref_peaks[idx - 1]
+
+            else:
+
+                new_mz = ref_peaks[idx]
 
         else:
+            new_mz = ref_peaks[-1]
 
-            new_mz = mzbin[idx]
+        if abs(new_mz - mz) / new_mz <= tol * 1e-6:
+            # new_peaks[new_mz] += spectrum.intensity_at(mz)
+            new_peaks[new_mz] = max(spectrum.intensity_at(mz), new_peaks[new_mz])
 
-        # new_peaks[new_mz] += spectrum.intensity_at(mz)
-        new_peaks[new_mz] = max(spectrum.intensity_at(mz), new_peaks[new_mz])
-
-    spectrum_bin = Spectrum(list(new_peaks.keys()), list(new_peaks.values()), mz_precision=mzbin_precision,
-                            metadata=spectrum.metadata)
+    spectrum_bin = Spectrum(list(new_peaks.keys()), list(new_peaks.values()), metadata=spectrum.metadata)
 
     return spot, spectrum_bin
 
 
-def create_feature_table(size: float, spectrum_dict: dict) -> pd.DataFrame:
+def get_ref_peaks(spectrum_dict: dict):
+    """
+    walk through all spectrum and find reference peaks for peak bining using Kernel Density Estimation
+
+    Parameters:
+    --------
+        spectrum_dict:
+
+    Returns:
+    --------
+
+    """
+
+    # get all mzs from the sample and sort them
+    mzs_all = [spec._peaks_mz for spec in spectrum_dict.values()]
+
+    mzs_all = np.concatenate(mzs_all).ravel()
+
+    mzs_all = np.sort(mzs_all)
+
+    cluster = list()
+
+    min_mz, max_mz = np.min(mzs_all), np.max(mzs_all)
+
+    min_mz = int(round(min_mz, 0))
+
+    max_mz = int(round(max_mz, 0))
+
+    mz_bin = range(min_mz, max_mz)
+
+    for i in tqdm.tqdm(range(len(mz_bin) - 1)):
+        left = np.searchsorted(mzs_all, mz_bin[i])
+
+        right = np.searchsorted(mzs_all, mz_bin[i + 1])
+
+        cluster.append(mzs_all[left:right])
+
+    ref_peaks = []
+
+    for c in cluster:
+        x, y = FFTKDE(kernel='gaussian', bw='ISJ').fit(c).evaluate()
+
+        # TODO: add smoothing before peak detection
+        y = (y - np.min(y)) / (np.max(y) - np.min(y))
+
+        peak_th = 0.3
+
+        peaks, _ = signal.find_peaks(y, height=peak_th)
+
+        ref_peaks.extend([round(x[i], 4) for i in peaks])
+
+    ref_peaks = np.sort(ref_peaks)
+
+    return ref_peaks
+
+
+def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
     """
     create binned feature table with designated bin size
     Parameters:
     --------
-        size: a float mass bin interval
+        ref_peaks: a list of reference peak to which the samples aligned
 
         spectrum_dict: a dictionary object with key as spot coordinates and spectrum as value
 
@@ -196,9 +257,6 @@ def create_feature_table(size: float, spectrum_dict: dict) -> pd.DataFrame:
         feature_table: a dataframe object
 
     """
-
-    def _safe_arange(start, stop, step):
-        return step * np.arange(start / step, stop / step)
 
     def mp_wrapper(func, source_dict, *args):
         to_do = list()
@@ -213,27 +271,15 @@ def create_feature_table(size: float, spectrum_dict: dict) -> pd.DataFrame:
             target_dict[res[0]] = res[1]
         return target_dict
 
-    mz_all = np.array(spectrum_dict[key]._peaks_mz for key in spectrum_dict)
-
-    mz_min = int(np.min(mz_all)) - 1
-
-    mz_max = int(np.max(mz_all)) + 1
-
-    mzs = _safe_arange(mz_min, mz_max, size)
-
-    mz_bin_precision = int(-1 * math.log10(size))
-
-    mzs = np.round(mzs, mz_bin_precision)
-
     with concurrent.futures.ProcessPoolExecutor() as executor:
 
         print("Binning the spectrum...")
 
-        bin_spectrum_dict = mp_wrapper(binize, spectrum_dict, mzs, mz_bin_precision)
+        bin_spectrum_dict = mp_wrapper(binize, spectrum_dict, ref_peaks)
 
         print("Combining the binned spectrum...")
 
-        primer_df = pd.DataFrame(np.zeros(mzs.shape), index=mzs)
+        primer_df = pd.DataFrame(np.zeros(ref_peaks.shape), index=list(ref_peaks))
 
         primer_df = primer_df.replace(0, np.nan)
 
@@ -249,7 +295,7 @@ def create_feature_table(size: float, spectrum_dict: dict) -> pd.DataFrame:
 
     result_arr = result_arr.toarray()
 
-    feature_table = pd.DataFrame(result_arr, columns=mzs)
+    feature_table = pd.DataFrame(result_arr, columns=list(ref_peaks))
 
     feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1]
 

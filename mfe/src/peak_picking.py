@@ -208,8 +208,6 @@ def get_peak_ranks(feature_table: pd.DataFrame):
 
     dirty_df = feature_table
 
-    dirty_df = dirty_df.iloc[:, 1:]
-
     spot = dirty_df[['x', 'y']].to_numpy()
 
     arr = dirty_df.drop(columns=['x', 'y']).to_numpy()
