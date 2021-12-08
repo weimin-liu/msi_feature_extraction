@@ -244,7 +244,7 @@ def get_peak_ranks(feature_table: pd.DataFrame):
     return t_df, deflated_arr
 
 
-def sel_peak_by_rank(t_df, feature_table: pd.DataFrame, threshold):
+def sel_peak_by_rank(t_df, deflated_arr, feature_table: pd.DataFrame, threshold):
     """
     Select the structured peaks (thus more meaningful) in the feature table and return the result
 
@@ -260,7 +260,16 @@ def sel_peak_by_rank(t_df, feature_table: pd.DataFrame, threshold):
     --------
         feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
 
+        deflated_arr_picked: an array with picked ion images
     """
+
+    t_df_arr = t_df.to_numpy()
+
+    mask = t_df_arr >= threshold
+
+    deflated_arr_picked = deflated_arr[mask]
+
+    deflated_arr_picked = np.array(deflated_arr_picked)
 
     t_df = t_df[t_df >= threshold]
 
@@ -272,7 +281,7 @@ def sel_peak_by_rank(t_df, feature_table: pd.DataFrame, threshold):
 
     feature_table_picked = feature_table[sel_columns]
 
-    return feature_table_picked
+    return feature_table_picked, deflated_arr_picked
 
 
 
