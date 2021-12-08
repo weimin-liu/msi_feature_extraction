@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import tqdm
-from skimage.feature.texture import greycomatrix
+from skimage.feature import greycomatrix
 from scipy import interpolate
 from skimage import exposure
 
@@ -207,8 +207,6 @@ def get_peak_ranks(feature_table: pd.DataFrame):
     """
 
     dirty_df = feature_table
-
-    dirty_df = dirty_df.iloc[:, 1:]
 
     spot = dirty_df[['x', 'y']].to_numpy()
 
