@@ -1,4 +1,3 @@
-import math
 import concurrent.futures
 import re
 from collections import defaultdict
@@ -11,7 +10,7 @@ from KDEpy import FFTKDE
 from scipy import signal
 from scipy.sparse import vstack, csr_matrix
 
-from mfe.src.util.Spectrum import Spectrum
+from mfe import Spectrum
 
 # precision of mass-to-charge ratio to use before binning
 MZ_PRECISION = 4

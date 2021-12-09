@@ -7,8 +7,8 @@ import pandas as pd
 import tqdm
 import numpy as np
 from mfe import create_feature_table
-from mfe.src.from_txt import msi_from_txt
-from mfe.src.util.accurate_mz import get_accmz
+from mfe import msi_from_txt
+from mfe import get_accmz
 
 
 # TODO:
