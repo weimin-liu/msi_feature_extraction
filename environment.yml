@@ -1,0 +1,17 @@
+name: msi_feature_extraction
+channels:
+  - conda-forge
+dependencies:
+  - matplotlib
+  - networkx
+  - nimfa
+  - numpy
+  - pandas
+  - pip
+  - scikit-image
+  - scikit-learn
+  - scipy
+  - setuptools
+  - tqdm
+  - pip:
+    - kdepy
