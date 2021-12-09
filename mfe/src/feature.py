@@ -2,15 +2,11 @@
 modified from https://github.com/mims-harvard/nimfa-ipynb/blob/master/ICGC%20and%20Nimfa.ipynb
 """
 
-import itertools
-
 import networkx as nx
+import nimfa
 import numpy as np
 import pandas as pd
-import nimfa
-from sklearn import preprocessing
-from matplotlib import gridspec, pyplot as plt
-import scipy.cluster.hierarchy as sch
+from matplotlib import pyplot as plt
 
 
 def rank_estimate(rank_candidates: list, ims):
@@ -26,35 +22,37 @@ def rank_estimate(rank_candidates: list, ims):
         ims: an array with ion images
     """
 
-    snmf = nimfa.Snmf(ims, seed='random_vcol', max_iter=100)
+    ims = ims.reshape(ims.shape[0], -1)
+
+    snmf = nimfa.Snmf(ims.T, seed='random_vcol', max_iter=100)
 
     summary = snmf.estimate_rank(rank_range=rank_candidates, n_run=10, what='all')
 
-    rss = [summary[rank]['rss'] for rank in rank_cands]
+    rss = [summary[rank]['rss'] for rank in rank_candidates]
 
     rss = rss / np.sum(rss)
 
-    coph = [summary[rank]['cophenetic'] for rank in rank_cands]
+    coph = [summary[rank]['cophenetic'] for rank in rank_candidates]
 
-    disp = [summary[rank]['dispersion'] for rank in rank_cands]
+    disp = [summary[rank]['dispersion'] for rank in rank_candidates]
 
-    spar = [summary[rank]['sparseness'] for rank in rank_cands]
+    spar = [summary[rank]['sparseness'] for rank in rank_candidates]
 
     spar_w, spar_h = zip(*spar)
 
-    evar = [summary[rank]['evar'] for rank in rank_cands]
+    evar = [summary[rank]['evar'] for rank in rank_candidates]
 
-    plt.plot(rank_cands, rss, 'o-', label='RSS', linewidth=2)
+    plt.plot(rank_candidates, rss, 'o-', label='RSS', linewidth=2)
 
-    plt.plot(rank_cands, coph, 'o-', label='Cophenetic correlation', linewidth=2)
+    plt.plot(rank_candidates, coph, 'o-', label='Cophenetic correlation', linewidth=2)
 
-    plt.plot(rank_cands, disp, 'o-', label='Dispersion', linewidth=2)
+    plt.plot(rank_candidates, disp, 'o-', label='Dispersion', linewidth=2)
 
-    plt.plot(rank_cands, spar_w, 'o-', label='Sparsity (Basis)', linewidth=2)
+    plt.plot(rank_candidates, spar_w, 'o-', label='Sparsity (Basis)', linewidth=2)
 
-    plt.plot(rank_cands, spar_h, 'o-', label='Sparsity (Mixture)', linewidth=2)
+    plt.plot(rank_candidates, spar_h, 'o-', label='Sparsity (Mixture)', linewidth=2)
 
-    plt.plot(rank_cands, evar, 'o-', label='Explained variance', linewidth=2)
+    plt.plot(rank_candidates, evar, 'o-', label='Explained variance', linewidth=2)
 
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3, numpoints=1)
 
@@ -64,11 +62,12 @@ def rank_estimate(rank_candidates: list, ims):
 
 
 def nmf(ims, feature_table, rank: int, n_run=1):
-
     """
     run nmf with the most stable rank suggested by rank_estimate. set n_run > 1 to get a molecular network based on the co-localization info
 
     """
+
+    ims = ims.reshape(ims.shape[0], -1).T
 
     if n_run == 1:
 
@@ -80,7 +79,7 @@ def nmf(ims, feature_table, rank: int, n_run=1):
 
     snmf_fitted = snmf()
 
-    mzs = list(feature_table.drop(columns = ['x', 'y']).columns())
+    mzs = list(feature_table.drop(columns=['x', 'y']).columns)
 
     basis = pd.DataFrame(snmf_fitted.fit.basis())
 
@@ -103,5 +102,6 @@ def nmf(ims, feature_table, rank: int, n_run=1):
     else:
 
         return basis, components
+
 
 

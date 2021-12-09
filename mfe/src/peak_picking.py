@@ -1,9 +1,9 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import tqdm
-from skimage.feature import greycomatrix
 from scipy import interpolate
 from skimage import exposure
+from skimage.feature import greycomatrix
 
 # === The matrix used to calculate texture score === #
 C8 = np.zeros((8, 8))
@@ -239,6 +239,10 @@ def get_peak_ranks(feature_table: pd.DataFrame):
 
     t_df = pd.DataFrame.from_dict(t, orient='index')
 
+    deflated_arr = np.array(deflated_arr)
+
+    deflated_arr[np.isnan(deflated_arr)] = 0
+
     return t_df, deflated_arr
 
 
@@ -261,7 +265,7 @@ def sel_peak_by_rank(t_df, deflated_arr, feature_table: pd.DataFrame, threshold)
         deflated_arr_picked: an array with picked ion images
     """
 
-    t_df_arr = t_df.to_numpy()
+    t_df_arr = t_df.to_numpy().flatten()
 
     mask = t_df_arr >= threshold
 
@@ -271,16 +275,14 @@ def sel_peak_by_rank(t_df, deflated_arr, feature_table: pd.DataFrame, threshold)
 
     t_df = t_df[t_df >= threshold]
 
+    t_df = t_df.dropna()
+
     sel_mzs = list(t_df.index)
 
     sel_mzs.extend(['x', 'y'])
 
-    sel_columns = [col for col in feature_table.columns() if col in sel_mzs]
+    sel_columns = [col for col in list(feature_table.columns) if col in sel_mzs]
 
     feature_table_picked = feature_table[sel_columns]
 
     return feature_table_picked, deflated_arr_picked
-
-
-
-
