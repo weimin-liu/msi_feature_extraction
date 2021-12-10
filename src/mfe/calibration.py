@@ -6,9 +6,8 @@ import concurrent
 import pandas as pd
 import tqdm
 import numpy as np
-from mfe import create_feature_table
-from mfe import msi_from_txt
-from mfe import get_accmz
+from src.mfe.from_txt import create_feature_table, msi_from_txt
+from src.mfe.util.accurate_mz import get_accmz
 
 
 # TODO:

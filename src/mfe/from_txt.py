@@ -10,7 +10,7 @@ from KDEpy import FFTKDE
 from scipy import signal
 from scipy.sparse import vstack, csr_matrix
 
-from mfe import Spectrum
+from src.mfe.util.Spectrum import Spectrum
 
 # precision of mass-to-charge ratio to use before binning
 MZ_PRECISION = 4
