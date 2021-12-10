@@ -1,4 +1,4 @@
-from src.mfe.util.cluster import show_kmeans
+from .cluster import show_kmeans
 
 
 def remove_abnormal_areas(spot, features):
