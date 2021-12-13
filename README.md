@@ -10,16 +10,19 @@ Python >= 3.5 is needed, and the required library is listed in requirements.txt.
 The package has been tested on both Windows (Windows 10), OSX, and Linux (Archlinux).
 
 ## Installation
+Just run the following command and the package with all dependecies will be installed.
 
-
+````bash
+pip install git+https://github.com/weimin-liu/msi_feature_extraction.git
+````
 
 ## Instruction
 ### Mass calibration
 Dataset should be calibrated first if it hasn't been calibrated yet. Currently, only a slightly modified version of single-point lock mass calibration is available in this package.
 
 ````python
-from mfe import suggest_calibrates, SimpleFallbackCalibrate
-from mfe import msi_from_txt
+from mfe.calibration import suggest_calibrates, SimpleFallbackCalibrate
+from mfe.from_txt import msi_from_txt
 
 # get a list of the most abundant peaks in the dataset
 
@@ -42,7 +45,7 @@ msi_calibrated = sfc.transform(msi)
 Currently, the discrete mass bins are evenly spaced with user designated interval.
 
 ````python
-from mfe import create_feature_table
+from mfe.from_txt import create_feature_table
 
 feature_table = create_feature_table(msi_calibrated)
 ````
@@ -53,21 +56,21 @@ A 2D table will be produced in this step, with columns being the name of mass bi
 No peak has been dropped until this step, grey-level co-occurrences matrix (GLCM) are used to detect how structured are those ion images and rank them.
 
 ````python
-from mfe import get_peak_ranks
+from mfe.peak_picking import get_peak_ranks
 
 t_df, deflated_arr = get_peak_ranks(feature_table)
 ````
 The result contains the ranked peaks with its corresponding ion image, manual examination is needed to decide a threshold (`th`) above which the peaks are preserved.
 
 ````python
-from mfe import sel_peak_by_rank
+from mfe.peak_picking import sel_peak_by_rank
 
 feature_table, ims = sel_peak_by_rank(t_df, deflated_arr, feature_table, th)
 ````
 ### Feature extraction using non-negative matrix factorization
 
 ````python
-from mfe import rank_estimate, nmf
+from mfe.feature import rank_estimate, nmf
 
 # first detect the appropriate rank for the data, the list of images are used here instead of the feature table, because the images have already been normalized with quantiles removed.
 rank_candidates = list(range(2, 20))
