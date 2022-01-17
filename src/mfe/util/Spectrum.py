@@ -32,6 +32,7 @@ class Spectrum:
         self._peaks_mz = np.array([])
         self._peaks_intensity = np.array([])
         self._peaks = {}
+        self._mz_err = np.array([])
         self._is_calibrated = False
         self.metadata = metadata
         self._mz_precision = mz_precision  # in decimals e.g.: mz_precision=3 => 5.342
@@ -53,6 +54,10 @@ class Spectrum:
         Note: Returned values are always sorted
         """
         return self._peaks_mz
+
+    @property
+    def mz_err(self):
+        return self._mz_err
 
     @property
     def mz_precision(self):

@@ -1,6 +1,7 @@
 import concurrent.futures
 import re
-from collections import defaultdict
+import typing
+from collections import defaultdict, OrderedDict
 import tqdm
 import numpy as np
 import pandas as pd
@@ -126,15 +127,21 @@ def combine_spectrum(spot: list, spectrum: Spectrum, primer_df: pd.DataFrame):
 
         csr_matrix(df.to_numpy().flatten()): a sparse matrix with binned mass spectrum
 
+        csr_matrix(err_df.to_numpy().flatten()): a sparse matrix with the mass error before and after peak alignment
+
     """
 
     spectrum_df = pd.DataFrame(spectrum.intensity_values, index=spectrum.mz_values)
 
+    err_df = pd.DataFrame(spectrum.mz_err, index=spectrum.mz_values)
+
     df = primer_df.combine_first(spectrum_df)
+
+    err_df = primer_df.combine_first(err_df)
 
     df = df.replace(np.nan, 0)
 
-    return spot, csr_matrix(df.to_numpy().flatten())
+    return spot, csr_matrix(df.to_numpy().flatten()), csr_matrix(err_df.to_numpy().flatten())
 
 
 def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
@@ -160,6 +167,8 @@ def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
     """
     new_peaks = defaultdict(int)
 
+    mz_err = {}
+
     for mz in spectrum.mz_values:
 
         if mz < np.max(ref_peaks):
@@ -177,11 +186,18 @@ def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
         else:
             new_mz = ref_peaks[-1]
 
-        if abs(new_mz - mz) / new_mz <= tol * 1e-6:
+        err = abs(new_mz - mz) / new_mz
+
+        if err <= tol * 1e-6:
             # new_peaks[new_mz] += spectrum.intensity_at(mz)
             new_peaks[new_mz] = max(spectrum.intensity_at(mz), new_peaks[new_mz])
+            mz_err[new_mz] = err * 1e6
 
     spectrum_bin = Spectrum(list(new_peaks.keys()), list(new_peaks.values()), metadata=spectrum.metadata)
+
+    mz_err = OrderedDict(sorted(mz_err.items()))
+
+    spectrum_bin._mz_err = np.array(list(mz_err.values()))
 
     return spot, spectrum_bin
 
@@ -242,7 +258,7 @@ def get_ref_peaks(spectrum_dict: dict):
     return ref_peaks
 
 
-def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
+def create_feature_table(spectrum_dict: dict, ref_peaks) -> typing.Tuple[pd.DataFrame, pd.DataFrame]:
     """
     create binned feature table with designated bin size
     Parameters:
@@ -254,6 +270,8 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
     Returns:
     --------
         feature_table: a dataframe object
+
+        err_table: return the mz error of each aligned peak in each spot for accuracy evaluation
 
     """
 
@@ -267,7 +285,7 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
         target_dict = dict()
         for future in done_iter:
             res = future.result()
-            target_dict[res[0]] = res[1]
+            target_dict[res[0]] = res
         return target_dict
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -275,6 +293,8 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
         print("Binning the spectrum...")
 
         bin_spectrum_dict = mp_wrapper(binize, spectrum_dict, ref_peaks)
+
+        bin_spectrum_dict = {key: bin_spectrum_dict[key][1] for key in bin_spectrum_dict.keys()}
 
         print("Combining the binned spectrum...")
 
@@ -284,18 +304,33 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> pd.DataFrame:
 
         combined_spectrum_dict = mp_wrapper(combine_spectrum, bin_spectrum_dict, primer_df)
 
+        err_dict = {key: combined_spectrum_dict[key][2] for key in combined_spectrum_dict.keys()}
+
+        combined_spectrum_dict = {key: combined_spectrum_dict[key][1] for key in combined_spectrum_dict.keys()}
+
     spot = list(combined_spectrum_dict.keys())
 
     spot = np.array(spot)
 
     intensity = list(combined_spectrum_dict.values())
 
+    err = list(err_dict.values())
+
     result_arr = vstack(intensity)
+
+    err_arr = vstack(err)
 
     result_arr = result_arr.toarray()
 
+    err_arr = err_arr.toarray()
+
     feature_table = pd.DataFrame(result_arr, columns=list(ref_peaks))
+
+    err_table = pd.DataFrame(err_arr, columns=list(ref_peaks))
 
     feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1]
 
-    return feature_table
+    err_table['x'], err_table['y'] = spot[:, 0], spot[:, 1]
+
+    return feature_table, err_table
+

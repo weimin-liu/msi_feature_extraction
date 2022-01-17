@@ -2,6 +2,7 @@ name: msi_feature_extraction
 channels:
   - conda-forge
 dependencies:
+  - python=3.8
   - matplotlib
   - networkx
   - nimfa
