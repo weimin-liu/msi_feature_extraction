@@ -67,6 +67,10 @@ class Spectrum:
     def intensity_values(self):
         return self._peaks_intensity
 
+    @property
+    def tic(self):
+        return np.sum(self._peaks_intensity)
+
     def intensity_at(self, mz):
         mz = round(mz, self._mz_precision)
         try:
