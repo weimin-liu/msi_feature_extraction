@@ -202,13 +202,21 @@ def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
     return spot, spectrum_bin
 
 
-def get_ref_peaks(spectrum_dict: dict):
+def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th=0.1):
     """
     walk through all spectrum and find reference peaks for peak bining using Kernel Density Estimation
 
     Parameters:
     --------
         spectrum_dict:
+
+        peak_picking_method: 'prominence' or 'height', used in function scipy.signal.find_peaks.
+
+        peak_th: the threshold for distinguishing between peaks and noises, used in the function
+        scipy.signal.find_peaks. The value should be between [0, 1), the higher the value, more peaks will be picked
+        here. if the peak_picking_method is set to 'height', then scipy.signal.find_peaks(, height=peak_th),
+        if is set to 'prominence', then scipy.signal.find_peaks(, prominence=(peak_th, None]). Read
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html for more reference.
 
     Returns:
     --------
@@ -247,9 +255,14 @@ def get_ref_peaks(spectrum_dict: dict):
         # TODO: add smoothing before peak detection
         y = (y - np.min(y)) / (np.max(y) - np.min(y))
 
-        peak_th = 0.3
+        peak_th = peak_th
 
-        peaks, _ = signal.find_peaks(y, height=peak_th)
+        if peak_picking_method == 'height':
+            peaks, _ = signal.find_peaks(y, height=peak_th)
+        elif peak_picking_method == 'prominence':
+            peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
+        else:
+            raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
 
         ref_peaks.extend([round(x[i], 4) for i in peaks])
 
