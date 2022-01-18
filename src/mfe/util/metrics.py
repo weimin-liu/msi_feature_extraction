@@ -23,17 +23,33 @@ def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) 
         raise ValueError("This feature table is not derived from the current raw data!")
     else:
 
-        feature = np.array(feature_table.drop(columns=['x', 'y']))
+        feature = feature_table
+        feature = feature.set_index(['x', 'y'])
+
+        keys = list(spectrum_dict.keys())
+
+        keys_df = pd.DataFrame(keys)
+
+        keys_df = keys_df.set_index([0, 1])
+
+        feature = feature.loc[keys_df.index, :]
+
+        feature = np.array(feature)
 
         tic_after = np.sum(feature, axis=1)
 
         coverage_dict = {}
 
         for m in range(len(spectrum_dict)):
+
             key = list(spectrum_dict.keys())[m]
+
             coverage_dict[key] = tic_after[m] / spectrum_dict[key].tic
+
             if coverage_dict[key] > 1:
+
                 raise ValueError('Something went wrong! TIC after alignment should not be greater than before!')
+
     return coverage_dict
 
 
