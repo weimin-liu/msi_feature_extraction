@@ -45,7 +45,7 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
         ref = get_ref_peaks(raw_data, peak_picking_method=peak_picking_method, peak_th=peak_th)
 
-        n_ref.append(ref)
+        n_ref.append(len(ref))
 
         feature_table, err_table = create_feature_table(raw_data, ref)
 
