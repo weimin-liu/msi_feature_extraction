@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) -> dict:
+def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) -> pd.DataFrame:
     """
     Use this function to evaluate the performance of peak alignment. It has two metrics, the first is the coverage of
     the intensity of the aligned peaks, the second is the accuracy, which measures the discrepancy of the reference
@@ -50,6 +50,16 @@ def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) 
 
                 raise ValueError('Something went wrong! TIC after alignment should not be greater than before!')
 
-    return coverage_dict
+        coverage = pd.DataFrame([coverage_dict]).T
+
+        tmp = pd.DataFrame(list(coverage.index))
+
+        coverage = coverage.reset_index()
+
+        coverage[['x', 'y']] = tmp
+
+        coverage = coverage[['x', 'y', 0]].rename(columns={0: 'TIC_coverage'})
+
+    return coverage
 
 
