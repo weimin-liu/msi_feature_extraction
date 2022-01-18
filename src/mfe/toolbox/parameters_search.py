@@ -5,7 +5,7 @@ from ..from_txt import get_ref_peaks, create_feature_table
 from ..util import metrics
 
 
-def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method='prominent') -> dict:
+def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method='prominence') -> dict:
     """
     This toolbox function can be used to decide which peak_th parameter should be used to get reference peaks. It
     will return four metrics for consideration:
