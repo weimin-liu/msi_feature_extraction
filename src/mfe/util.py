@@ -8,7 +8,7 @@ import pandas as pd
 import tqdm
 from matplotlib import pyplot as plt
 
-from src.mfe.from_txt import get_ref_peaks, create_feature_table
+from .from_txt import get_ref_peaks, create_feature_table
 
 
 def imshow(array: np.arrary, fill=0) -> np.arrary:
