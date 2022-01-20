@@ -6,7 +6,7 @@ import concurrent
 import pandas as pd
 import tqdm
 import numpy as np
-from .from_txt import create_feature_table, msi_from_txt
+from .from_txt import msi_from_txt, create_feature_table
 from .depreciated.accurate_mz import get_accmz
 
 

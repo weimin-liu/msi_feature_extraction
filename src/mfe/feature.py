@@ -104,4 +104,3 @@ def nmf(ims, feature_table, rank: int, n_run=1):
         return basis, components
 
 
-
