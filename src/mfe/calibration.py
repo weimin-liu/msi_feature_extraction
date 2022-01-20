@@ -7,7 +7,7 @@ import pandas as pd
 import tqdm
 import numpy as np
 from .from_txt import create_feature_table, msi_from_txt
-from .util.accurate_mz import get_accmz
+from .depreciated.accurate_mz import get_accmz
 
 
 # TODO:

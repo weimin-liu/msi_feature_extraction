@@ -4,7 +4,7 @@ import tqdm
 
 import numpy as np
 
-from .Spectrum import Spectrum
+from src.mfe.util import Spectrum
 
 
 def print_doc(func):
