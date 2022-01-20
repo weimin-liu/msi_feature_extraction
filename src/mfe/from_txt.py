@@ -186,9 +186,9 @@ def binize(spot, spectrum: Spectrum, ref_peaks, tol=10):
         else:
             new_mz = ref_peaks[-1]
 
-        err = abs(new_mz - mz) / new_mz
+        err = (new_mz - mz) / new_mz
 
-        if err <= tol * 1e-6:
+        if abs(err) <= tol * 1e-6:
             # new_peaks[new_mz] += spectrum.intensity_at(mz)
             new_peaks[new_mz] = max(spectrum.intensity_at(mz), new_peaks[new_mz])
             mz_err[new_mz] = err * 1e6
