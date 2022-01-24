@@ -85,6 +85,7 @@ class GLCMPeakRanking:
 
         """
         self.feature_table = feature_table
+
         dirty_df = self.feature_table
 
         spot = dirty_df[['x', 'y']].to_numpy()
@@ -140,9 +141,14 @@ class GLCMPeakRanking:
         """
 
         if self.interpolation_method == 'blur':
+
             image[np.isnan(image)] = self.fill_value
-            kernel = np.ones((self.blur_filter[0], (self.blur_filter[1])), np.float32) / (self.blur_filter[0] * self.blur_filter[1])
+
+            kernel = np.ones((self.blur_filter[0], (self.blur_filter[1])), np.float32) / (
+                        self.blur_filter[0] * self.blur_filter[1])
+
             interp_image = cv2.filter2D(image, -1, kernel)
+
         else:
             h, w = image.shape[:2]
             xx, yy = np.meshgrid(np.arange(w), np.arange(h))
@@ -269,6 +275,7 @@ class GLCMPeakRanking:
 
         Parameters:
 
+            angle:
             image: the 2d image array
 
         Returns:
@@ -277,26 +284,49 @@ class GLCMPeakRanking:
 
         """
         nan_flg = False
-        df = pd.DataFrame(image.reshape(-1, 1))
-        n_spots = np.count_nonzero(df[0].to_numpy())
-        bin_labels = list(range(self.q))
-        try:
-            if df[0].min() == 0:
-                df = df.replace(0, np.nan)
-                nan_flg = True
-            df['quantile_ex_1'] = pd.qcut(df[0], q=self.q, labels=bin_labels, duplicates='drop')
-            im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
-            im_quantized[np.isnan(im_quantized)] = self.q
-            im_quantized = im_quantized.astype(int)
-            if nan_flg:
-                gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q + 1)[:, :, 0, 0]
-                gcm = gcm[0:-1, 0:-1]
-            else:
-                gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q)[:, :, 0, 0]
-            score = np.sum(np.multiply(gcm, self.C)) / n_spots
 
-        except ValueError:
+        df = pd.DataFrame(image.reshape(-1, 1))
+
+        n_spots = np.count_nonzero(df[0].to_numpy())
+
+        bin_labels = list(range(self.q))
+
+        if n_spots == 0:
+
             score = 0
+
+        else:
+
+            try:
+
+                if df[0].min() == 0:
+                    df = df.replace(0, np.nan)
+
+                    nan_flg = True
+
+                df['quantile_ex_1'] = pd.qcut(df[0], q=self.q, labels=bin_labels, duplicates='drop')
+
+                im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
+
+                im_quantized[np.isnan(im_quantized)] = self.q
+
+                im_quantized = im_quantized.astype(int)
+
+                if nan_flg:
+
+                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q + 1)[:, :, 0, 0]
+
+                    gcm = gcm[0:-1, 0:-1]
+
+                else:
+
+                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q)[:, :, 0, 0]
+
+                score = np.sum(np.multiply(gcm, self.C)) / n_spots
+
+            except ValueError:
+
+                score = 0
 
         return score
 
