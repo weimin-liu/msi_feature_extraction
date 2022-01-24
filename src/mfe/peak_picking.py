@@ -4,6 +4,7 @@ import tqdm
 from scipy import interpolate
 from skimage import exposure
 from skimage.feature import graycomatrix
+import cv2
 
 
 class GLCMPeakRanking:
@@ -19,7 +20,8 @@ class GLCMPeakRanking:
     def __init__(self,
                  interpolation=True,
                  fill_value=0,
-                 interpolation_method='nearest',
+                 interpolation_method='blur',
+                 blur_filter=(2, 2),
                  whitespace_removal=False,
                  contrast_stretch=True,
                  contrast_lim=(2, 98),
@@ -43,6 +45,7 @@ class GLCMPeakRanking:
             self.whitespace_removal = whitespace_removal
             self.contrast_stretch = contrast_stretch
             self.contrast_lim = contrast_lim
+            self.blur_filter = blur_filter
             self.q = q
             self.feature_table = pd.DataFrame()
             self.images = list()
@@ -57,20 +60,21 @@ class GLCMPeakRanking:
             del self.images
             del self.score
 
-    def fit(self, feature_table: pd.DataFrame):
+    def fit(self, feature_table: pd.DataFrame, angle=0):
         """
         Parameters:
         --------
         """
         self._reset()
-        return self.partial_fit(feature_table)
+        return self.partial_fit(feature_table, angle=angle)
 
-    def partial_fit(self, feature_table: pd.DataFrame):
+    def partial_fit(self, feature_table: pd.DataFrame, angle=0):
         """
         This is an example of how to get structured ion image from feature table.
 
         Parameters:
 
+            angle:
             feature_table: a DataFrame object
 
         Returns:
@@ -80,8 +84,8 @@ class GLCMPeakRanking:
             deflated_arr: a 3d array with ion image ravelled
 
         """
-
-        dirty_df = feature_table
+        self.feature_table = feature_table
+        dirty_df = self.feature_table
 
         spot = dirty_df[['x', 'y']].to_numpy()
 
@@ -109,7 +113,7 @@ class GLCMPeakRanking:
             if self.interpolation:
                 image = self.interpolate_missing_pixels(image)
 
-            score = self.cal_structure_score(image)
+            score = self.cal_structure_score(image, angle)
 
             self.images.append(image)
 
@@ -135,25 +139,29 @@ class GLCMPeakRanking:
             the image with missing values interpolated
         """
 
-        h, w = image.shape[:2]
-        xx, yy = np.meshgrid(np.arange(w), np.arange(h))
+        if self.interpolation_method == 'blur':
+            image[np.isnan(image)] = self.fill_value
+            kernel = np.ones((self.blur_filter[0], (self.blur_filter[1])), np.float32) / (self.blur_filter[0] * self.blur_filter[1])
+            interp_image = cv2.filter2D(image, -1, kernel)
+        else:
+            h, w = image.shape[:2]
+            xx, yy = np.meshgrid(np.arange(w), np.arange(h))
 
-        image = np.ma.masked_invalid(image)
+            image = np.ma.masked_invalid(image)
 
-        known_x = xx[~image.mask]
-        known_y = yy[~image.mask]
-        known_v = image[~image.mask]
-        missing_x = xx[image.mask]
-        missing_y = yy[image.mask]
+            known_x = xx[~image.mask]
+            known_y = yy[~image.mask]
+            known_v = image[~image.mask]
+            missing_x = xx[image.mask]
+            missing_y = yy[image.mask]
 
-        interp_values = interpolate.griddata(
-            (known_x, known_y), known_v, (missing_x, missing_y),
-            method=self.interpolation_method, fill_value=self.fill_value
-        )
+            interp_values = interpolate.griddata(
+                (known_x, known_y), known_v, (missing_x, missing_y),
+                method=self.interpolation_method, fill_value=self.fill_value
+            )
 
-        interp_image = image.copy()
-        interp_image[missing_y, missing_x] = interp_values
-
+            interp_image = image.copy()
+            interp_image[missing_y, missing_x] = interp_values
         return interp_image
 
     @property
@@ -254,7 +262,7 @@ class GLCMPeakRanking:
         image = exposure.rescale_intensity(image, in_range=(p2, p98))
         return image
 
-    def cal_structure_score(self, image):
+    def cal_structure_score(self, image, angle):
         """
         Quantize the image and then calculate its structure score using grey-level co-occurrence matrix. See
         https://scikit-image.org/docs/0.7.0/api/skimage.feature.texture.html
@@ -281,10 +289,10 @@ class GLCMPeakRanking:
             im_quantized[np.isnan(im_quantized)] = self.q
             im_quantized = im_quantized.astype(int)
             if nan_flg:
-                gcm = graycomatrix(im_quantized, [1], [0], levels=self.q + 1)[:, :, 0, 0]
+                gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q + 1)[:, :, 0, 0]
                 gcm = gcm[0:-1, 0:-1]
             else:
-                gcm = graycomatrix(im_quantized, [1], [0], levels=self.q)[:, :, 0, 0]
+                gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q)[:, :, 0, 0]
             score = np.sum(np.multiply(gcm, self.C)) / n_spots
 
         except ValueError:
