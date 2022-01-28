@@ -1,107 +1,198 @@
 """
-modified from https://github.com/mims-harvard/nimfa-ipynb/blob/master/ICGC%20and%20Nimfa.ipynb
+https://github.com/yal054/snATAC/blob/e70087fb3c71a34dd5a36b72515379115e804c40/snATAC.nmf.py
 """
+import itertools
+import math
 
-import networkx as nx
-import nimfa
+import scipy.cluster.hierarchy as sch
+import scipy.spatial.distance as ssd
+from matplotlib import pyplot as plt, gridspec
+from sklearn.decomposition import NMF
 import numpy as np
-import pandas as pd
-from matplotlib import pyplot as plt
+import tqdm
 
 
-def rank_estimate(rank_candidates: list, ims):
+def predict_H(H):
+    colmax = np.amax(H, axis=0)
+    colsum = np.sum(H, axis=0)
+    p = colmax / colsum
+    idx = H.argmax(axis=0)
+    out = [idx, p]
+    return out
+
+
+def cal_conectivity(H, idx):
+    connectivity_mat = np.zeros((H.shape[1], H.shape[1]))
+    classN = H.shape[0]
+    for i in range(classN):
+        xidx = list(np.concatenate(np.where(idx == i)))
+        iterables = [xidx, xidx]
+        for t in itertools.product(*iterables):
+            connectivity_mat[t[0], t[1]] = 1
+    return connectivity_mat
+
+
+def cal_sparsity(X):
+    vec = list(np.concatenate(X))
+    absSum = np.sum(np.abs(vec))
+    n = np.prod(X.shape)
+    squareSum = np.sum(np.square(vec))
+    numerator = np.sqrt(n) - (absSum / np.sqrt(squareSum))
+    denominator = np.sqrt(n) - 1
+    sparsity = numerator / denominator
+    return sparsity
+
+
+def cal_rss_mse(W, H, V):
+    residualSquare = np.square(W.dot(H) - V)
+    rss = np.sum(residualSquare)
+    mse = np.mean(residualSquare)
+    out = [rss, mse]
+    return out
+
+
+def cal_evar(rss, V):
+    evar = 1 - (rss / np.sum(V ** 2))
+    return evar
+
+
+def cal_cophenetic(C):
+    X = C  # Original data (1000 observations)
+    Z = sch.linkage(X)  # Clustering
+    orign_dists = ssd.pdist(X)  # Matrix of original distances between observations
+    cophe_dists = sch.cophenet(Z)  # Matrix of cophenetic distances between observations
+    corr_coef = np.corrcoef(orign_dists, cophe_dists)[0, 1]
+    return corr_coef
+
+
+def cal_dispersion(C):
+    n = C.shape[1]
+    corr_disp = np.sum(4 * np.square(np.concatenate(C - 1 / 2))) / (np.square(n))
+    return corr_disp
+
+
+def cal_featureScore_kim(W):
+    k = W.shape[1]
+    m = W.shape[0]
+    s_list = []
+    for i in range(m):
+        rowsum = np.sum(W[i,])
+        p_iq_x_list = []
+        for q in range(k):
+            p_iq = W[i, q] / rowsum
+            if p_iq != 0:
+                tmp = p_iq * math.log(p_iq, 2)
+            else:
+                tmp = 0
+            p_iq_x_list.append(tmp)
+        s = 1 + 1 / math.log(k, 2) * np.sum(p_iq_x_list)
+        s_list.append(s)
+    return s_list
+
+
+def repeated_nmf(V, rank, n_run, *args, **kwargs):
     """
-    estimate rank for NMF using Nimfa package. Sparse non-negative matrix factorization are used here, and the sparseness is imposed on the right matrix (coefficients) The result will be plotted.
 
-    https://github.com/mims-harvard/nimfa-ipynb/blob/master/ICGC%20and%20Nimfa.ipynb
+    Args:
+        W:
+        rank:
+        n:
 
-    Parameters:
-    --------
-        rank_candidates: a list object with ranks to be estimated (integer)
-
-        ims: an array with ion images
-    """
-
-    ims = ims.reshape(ims.shape[0], -1)
-
-    snmf = nimfa.Snmf(ims.T, seed='random_vcol', max_iter=100)
-
-    summary = snmf.estimate_rank(rank_range=rank_candidates, n_run=10, what='all')
-
-    rss = [summary[rank]['rss'] for rank in rank_candidates]
-
-    rss = rss / np.sum(rss)
-
-    coph = [summary[rank]['cophenetic'] for rank in rank_candidates]
-
-    disp = [summary[rank]['dispersion'] for rank in rank_candidates]
-
-    spar = [summary[rank]['sparseness'] for rank in rank_candidates]
-
-    spar_w, spar_h = zip(*spar)
-
-    evar = [summary[rank]['evar'] for rank in rank_candidates]
-
-    plt.plot(rank_candidates, rss, 'o-', label='RSS', linewidth=2)
-
-    plt.plot(rank_candidates, coph, 'o-', label='Cophenetic correlation', linewidth=2)
-
-    plt.plot(rank_candidates, disp, 'o-', label='Dispersion', linewidth=2)
-
-    plt.plot(rank_candidates, spar_w, 'o-', label='Sparsity (Basis)', linewidth=2)
-
-    plt.plot(rank_candidates, spar_h, 'o-', label='Sparsity (Mixture)', linewidth=2)
-
-    plt.plot(rank_candidates, evar, 'o-', label='Explained variance', linewidth=2)
-
-    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3, numpoints=1)
-
-    plt.tight_layout()
-
-    plt.show()
-
-
-def nmf(ims, feature_table, rank: int, n_run=1):
-    """
-    run nmf with the most stable rank suggested by rank_estimate. set n_run > 1 to get a molecular network based on the co-localization info
+    Returns:
 
     """
+    out_list = []
 
-    ims = ims.reshape(ims.shape[0], -1).T
+    consensus = np.zeros((V.shape[1], V.shape[1]))
 
-    if n_run == 1:
+    for i in tqdm.tqdm(range(n_run)):
+        model = NMF(n_components=rank, random_state=i, *args, **kwargs)
 
-        snmf = nimfa.Snmf(ims, rank=rank, seed='random_vcol', version='r', n_run=n_run, max_iter=500)
+        W = model.fit_transform(V)
 
-    elif n_run > 1:
+        H = model.components_
 
-        snmf = nimfa.Snmf(ims, rank=rank, seed='random_vcol', version='r', track_factor=True, n_run=n_run, max_iter=500)
+        consensus += cal_conectivity(H, predict_H(H)[0])
 
-    snmf_fitted = snmf()
+        o_sparseH = cal_sparsity(H)
 
-    mzs = list(feature_table.drop(columns=['x', 'y']).columns)
+        o_sparseW = cal_sparsity(W)
 
-    basis = pd.DataFrame(snmf_fitted.fit.basis())
+        o_rss_mse = cal_rss_mse(W, H, V)
 
-    components = pd.DataFrame(snmf_fitted.fit.coef().T, index=mzs)
+        o_rss = o_rss_mse[0]
 
-    if n_run > 1:
+        o_mse = o_rss_mse[1]
 
-        consensus = pd.DataFrame(snmf_fitted.fit.consensus(), index=mzs, columns=mzs)
+        o_evar = cal_evar(o_rss, V)
 
-        consensus.values[[np.arange(len(consensus))] * 2] = np.nan
+        out = [o_sparseH, o_sparseW, o_rss, o_mse, o_evar]
 
-        consensus = consensus.stack().reset_index()
+        out_list.append(out)
 
-        consensus = consensus[consensus[0] >= 0.9]
+    out_list = np.array(out_list)
 
-        G = nx.from_pandas_edgelist(consensus, source='level_0', target='level_1')
+    mean_out = list(np.mean(out_list, axis=0))
 
-        return basis, components, G
+    consensus /= n_run
 
-    else:
+    o_cophcor = cal_cophenetic(consensus)
 
-        return basis, components
+    o_disp = cal_dispersion(consensus)
+
+    o_fsW = cal_featureScore_kim(W)
+
+    mean_out.append(o_cophcor)
+
+    mean_out.append(o_disp)
+
+    mean_out.append(o_fsW)
+
+    mean_out.append(consensus)
+
+    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus']
+
+    summary = {}
+
+    for i in range(len(mean_out)):
+        summary[result_name[i]] = mean_out[i]
+
+    return summary
 
 
+def clean_axis(ax):
+    ax.get_xaxis().set_ticks([])
+    ax.get_yaxis().set_ticks([])
+    for sp in ax.spines.values():
+        sp.set_visible(False)
 
+
+def save_consensus(C, prefix, dpi=600):
+
+    r_C = 1 - C
+
+    fig = plt.figure(figsize=(13.9, 10))
+
+    heatmapGS = gridspec.GridSpec(1, 2, wspace=.01, hspace=0., width_ratios=[0.25, 1])
+
+    Y = sch.linkage(r_C, method='average')
+
+    denAX = fig.add_subplot(heatmapGS[0, 0])
+
+    denD = sch.dendrogram(Y, orientation='left', link_color_func=lambda k: 'black')
+
+    clean_axis(denAX)
+
+    heatmapAX = fig.add_subplot(heatmapGS[0, 1])
+
+    D = r_C[denD['leaves'], :][:, denD['leaves']]
+
+    axi = heatmapAX.imshow(D, interpolation='nearest', aspect='equal', origin='lower', cmap='RdBu')
+
+    clean_axis(heatmapAX)
+
+    cb = fig.colorbar(axi, fraction=0.046, pad=0.04, aspect=10)
+
+    cb.set_label('Distance', fontsize=20)
+
+    plt.savefig(f'{prefix}_consensus', dpi=dpi)

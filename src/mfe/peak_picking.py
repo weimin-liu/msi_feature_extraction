@@ -2,103 +2,253 @@ import numpy as np
 import pandas as pd
 import tqdm
 from scipy import interpolate
-from skimage import exposure
-from skimage.feature import greycomatrix
-
-# === The matrix used to calculate texture score === #
-C8 = np.zeros((8, 8))
-C8[0, 0] = 4
-C8[0, 1] = 2
-C8[1, 0] = 2
-C8[0, 2] = 1
-C8[2, 0] = 1
-C8[1, 1] = 1
-C8[-1, -1] = 4
-C8[-1, -2] = 2
-C8[-2, -1] = 2
-C8[-1, -3] = 1
-C8[-3, -1] = 1
-C8[-2, -2] = 1
-
-C4 = np.zeros((4, 4))
-C4[0, 0] = 2
-C4[0, 1] = 1
-C4[1, 0] = 1
-C4[-1, -1] = 2
-C4[-1, -2] = 1
-C4[-2, -1] = 1
-# =================================================== #
+from skimage.feature import graycomatrix
+from scipy.interpolate import interpolate
+from skimage.exposure import exposure
+import cv2
 
 
-def interpolate_missing_pixels(
-        image: np.ndarray,
-        fill_value: int = 0,
-        method: str = 'nearest'
-):
-    """
-    Parameters:
+class GLCMPeakRanking:
+    # === The matrix used to calculate texture score === #
+    C = np.array([
+        [4, 2, 1, 0, 0],
+        [2, 1, 0, 0, 0],
+        [1, 0, 0, 0, 1],
+        [0, 0, 0, 1, 2],
+        [0, 0, 1, 2, 4]
+    ])
 
-        image: a 2D image, from which the edge whitespace have already been removed.
+    def __init__(self,
+                 fill_value=0,
+                 interpolation='blur',
+                 blur_filter=(2, 2),
+                 remove_whitespace=False,
+                 stretch_contrast=True,
+                 contrast_lim=(2, 98),
+                 q=5):
+        """
+        Args:
+            fill_value: the value with which to fill the missing pixels when interpolation is not possible
+            interpolation: interpolation method, one of 'nearest', 'linear', 'cubic'.
+            remove_whitespace:
+            stretch_contrast:
+            contrast_lim:
+            q: in order to get a more fair structure score, for each ion image, their intensities are evenly divided into
+            bins with a number of q, and the intensities are then replaced with the label (integer number). Currently,
+            q is fixed to 5 for the convenience of the following structure score calculation.
+        """
+        if self.C.shape[0] == self.C.shape[0] == q:
+            self.interpolation = interpolation
+            self.fill_value = fill_value
+            self.remove_whitespace = remove_whitespace
+            self.stretch_contrast = stretch_contrast
+            self.contrast_lim = contrast_lim
+            self.blur_filter = blur_filter
+            self.q = q
+            self.feature_table = pd.DataFrame()
+            self.images = list()
+            self.score = pd.DataFrame()
+            self.mzs = np.array([])
+        else:
+            raise ValueError('The number of zones are not equal to the calculation matrix!')
 
-        fill_value: the value with which to fill the missing pixels when interpolation is not possible
+    def _reset(self):
+        if len(self.score) != 0:
+            del self.feature_table
+            del self.images
+            del self.score
 
-        method: interpolation method, one of 'nearest', 'linear', 'cubic'.
+    def fit(self, feature_table: pd.DataFrame, angle=0):
+        """
+        Parameters:
+        --------
+        """
+        self._reset()
+        return self.partial_fit(feature_table, angle=angle)
 
-    Return:
+    def partial_fit(self, feature_table: pd.DataFrame, angle=0):
+        """
+        This is an example of how to get structured ion image from feature table.
 
-        the image with missing values interpolated
-    """
+        Parameters:
 
-    h, w = image.shape[:2]
-    xx, yy = np.meshgrid(np.arange(w), np.arange(h))
+            angle:
+            feature_table: a DataFrame object
 
-    image = np.ma.masked_invalid(image)
+        Returns:
 
-    known_x = xx[~image.mask]
-    known_y = yy[~image.mask]
-    known_v = image[~image.mask]
-    missing_x = xx[image.mask]
-    missing_y = yy[image.mask]
+            t_df: structure scores for each ion image
 
-    interp_values = interpolate.griddata(
-        (known_x, known_y), known_v, (missing_x, missing_y),
-        method=method, fill_value=fill_value
-    )
+            deflated_arr: a 3d array with ion image ravelled
 
-    interp_image = image.copy()
-    interp_image[missing_y, missing_x] = interp_values
+        """
+        self.feature_table = feature_table
 
-    return interp_image
+        dirty_df = self.feature_table
+
+        spot = dirty_df[['x', 'y']].to_numpy()
+
+        arr = dirty_df.drop(columns=['x', 'y']).to_numpy()
+
+        mzs = list(dirty_df.drop(columns=['x', 'y']).columns)
+        self.mzs = np.array([float(mz) for mz in mzs])
+
+        t = dict()
+
+        print('Processing each ion image')
+
+        for mz in tqdm.tqdm(list(self.mzs)):
+            test = arr[:, self.mzs == mz]
+
+            image = de_flatten(spot, test,
+                               remove_whitespace=self.remove_whitespace,
+                               stretch_contrast=self.stretch_contrast,
+                               contrast_lim=self.contrast_lim,
+                               interpolation=self.interpolation,
+                               blur_filter=self.blur_filter,
+                               fill_value=self.fill_value)
+
+            score = self.cal_structure_score(image, angle)
+
+            self.images.append(image)
+
+            t[mz] = score
+
+        self.score = pd.DataFrame.from_dict(t, orient='index')
+
+        self.images = np.array(self.images)
+
+        self.images[np.isnan(self.images)] = 0
+
+    @property
+    def mzs_sorted(self):
+        """
+        Return mz values of the ion images sorted by ranking structured score
+
+        Returns:
+        """
+        score_sorted = self.score.sort_values(by=0, ascending=False)
+        mzs_sorted = np.array(list(score_sorted.index))
+        return mzs_sorted
+
+    @property
+    def images_sorted(self):
+        """
+        return image arrays that are sorted by ranking structured score
+
+        Returns:
+
+        """
+        score = self.score.to_numpy().flatten()
+        score_increase = score.argsort()
+        images_sorted = self.images[score_increase[::-1]]
+        return images_sorted
+
+    def cal_structure_score(self, image, angle):
+        """
+        Quantize the image and then calculate its structure score using grey-level co-occurrence matrix. See
+        https://scikit-image.org/docs/0.7.0/api/skimage.feature.texture.html
+
+        Parameters:
+
+            angle:
+            image: the 2d image array
+
+        Returns:
+
+            The structure score of the image. The higher the score, the more structured the ion image.
+
+        """
+        nan_flg = False
+
+        df = pd.DataFrame(image.reshape(-1, 1))
+
+        n_spots = np.count_nonzero(df[0].to_numpy())
+
+        bin_labels = list(range(self.q))
+
+        if n_spots == 0:
+
+            score = 0
+
+        else:
+
+            try:
+
+                if df[0].min() == 0:
+                    df = df.replace(0, np.nan)
+
+                    nan_flg = True
+
+                df['quantile_ex_1'] = pd.qcut(df[0], q=self.q, labels=bin_labels, duplicates='drop')
+
+                im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
+
+                im_quantized[np.isnan(im_quantized)] = self.q
+
+                im_quantized = im_quantized.astype(int)
+
+                if nan_flg:
+
+                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q + 1)[:, :, 0, 0]
+
+                    gcm = gcm[0:-1, 0:-1]
+
+                else:
+
+                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q)[:, :, 0, 0]
+
+                score = np.sum(np.multiply(gcm, self.C)) / n_spots
+
+            except ValueError:
+
+                score = 0
+
+        return score
+
+    def transform(self, threshold):
+        """
+        Select the structured peaks (thus more meaningful) in the feature table and return the result
+
+        Parameters:
+        --------
+            t_df: a DataFrame object with ranked mass-to-charge ratios
+
+            feature_table: a Dataframe object
+
+            threshold: above which the peaks will be preserved
+
+        Returns:
+        --------
+            feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
+
+            deflated_arr_picked: an array with picked ion images
+        """
+
+        t_df_arr = self.score.to_numpy().flatten()
+
+        mask = t_df_arr >= threshold
+
+        images_picked = self.images[mask]
+
+        images_picked = np.array(images_picked)
+
+        t_df = self.score[self.score >= threshold]
+
+        t_df = t_df.dropna()
+
+        sel_mzs = list(t_df.index)
+
+        sel_mzs.extend(['x', 'y'])
+
+        sel_columns = [col for col in list(self.feature_table.columns) if col in sel_mzs]
+
+        feature_table_picked = self.feature_table[sel_columns]
+
+        return feature_table_picked, images_picked
 
 
-def de_flatten(coordinates: np.ndarray, peaks: np.ndarray):
-    """
-    Parameters:
-
-        coordinates: array with x, y coordinates
-
-        peaks: 1d array of intensity
-
-    Return:
-
-        de-flattened array that has the shape of same as the slide
-    """
-    x_location = coordinates[:, 0].astype(int)
-    y_location = coordinates[:, 1].astype(int)
-    min_x = min(x_location)
-    min_y = min(y_location)
-    x_location = x_location - min_x
-    y_location = y_location - min_y
-    col = max(np.unique(x_location))
-    row = max(np.unique(y_location))
-    im = np.zeros((col + 1, row + 1))
-    im[:] = np.nan
-    for i in range(len(x_location)):
-        im[x_location[i], y_location[i]] = peaks[i]
-    return im
-
-
-def remove_whitespace(image: np.ndarray):
+def whitespace_removal(image: np.ndarray):
     """
     The original image of the slide is slightly crooked, therefore, a slight rotation followed by removing whitespace
     is needed before interpolating missing pixels. Note that the rotation angel and whitespace threshold is highly
@@ -121,12 +271,13 @@ def remove_whitespace(image: np.ndarray):
     # image = image[4:249]
 
     # ideal for the 0-5cm slice, only cut out the whitespace without rotation, to avoid any false interpolation
-    image = image[26:235, 3:-5]
+    # image = image[26:235, 3:-5]
 
     return image
 
 
-def contrast_stretching(image: np.ndarray):
+def contrast_stretching(image: np.ndarray,
+                        contrast_lim=(2, 98)):
     """
     The ion image may have hotspot, thus influence the following analysis. In contrast stretching, the image is
     rescaled to include all intensities that fall within the 2nd and 98th percentiles. For comparing with histogram
@@ -134,6 +285,7 @@ def contrast_stretching(image: np.ndarray):
 
     Parameters:
 
+        contrast_lim:
         image: the 2d array of image that may have hotspot
 
     Returns:
@@ -141,148 +293,103 @@ def contrast_stretching(image: np.ndarray):
         image array with hotspot removed
 
     """
-    p2, p98 = np.nanpercentile(image, (2, 98))
-    image = exposure.rescale_intensity(image, in_range=(p2, p98))
+    p_low, p_high = np.nanpercentile(image, contrast_lim)
+    image = exposure.rescale_intensity(image, in_range=(p_low, p_high))
     return image
 
 
-def cal_structure_score(image, q=4):
+def de_flatten(coordinates: np.ndarray,
+               peaks: np.ndarray,
+               remove_whitespace=False,
+               stretch_contrast=True,
+               contrast_lim=(2, 98),
+               interpolation='blur',
+               blur_filter=(2, 2),
+               fill_value=0
+               ):
     """
-    Quantize the image and then calculate its structure score using grey-level co-occurrence matrix. See
-    https://scikit-image.org/docs/0.7.0/api/skimage.feature.texture.html
-
     Parameters:
 
-        image: the 2d image array
+        fill_value:
+        blur_filter:
+        interpolation:
+        contrast_lim:
+        remove_whitespace:
+        stretch_contrast:
+        coordinates: array with x, y coordinates
 
-        q: in order to get a more fair structure score, for each ion image, their intensities are evenly divided into
-        bins with a number of q, and the intensities are then replaced with the label (integer number). Currently,
-        q is fixed to 4 for the convenience of the following structure score calculation.
+        peaks: 1d array of intensity
 
-    Returns:
+    Return:
 
-        The structure score of the image. The higher the score, the more structured the ion image.
-
+        de-flattened array that has the shape of same as the slide
     """
-    nan_flg = False
-    df = pd.DataFrame(image.reshape(-1, 1))
-    n_spots = np.count_nonzero(df[0].to_numpy())
-    q = q
-    bin_labels = list(range(q))
-    try:
-        if df[0].min() == 0:
-            df = df.replace(0, np.nan)
-            nan_flg = True
-        df['quantile_ex_1'] = pd.qcut(df[0], q=q, labels=bin_labels, duplicates='drop')
-        im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
-        im_quantized[np.isnan(im_quantized)] = q
-        im_quantized = im_quantized.astype(int)
-        if nan_flg:
-            gcm = greycomatrix(im_quantized, [1], [3 * np.pi / 4], levels=q+1)[:, :, 0, 0]
-            gcm = gcm[0:-1, 0:-1]
-        else:
-            gcm = greycomatrix(im_quantized, [1], [3 * np.pi / 4], levels=q)[:, :, 0, 0]
-        score = np.sum(np.multiply(gcm, C4)) / n_spots
-
-    except ValueError:
-        score = 0
-
-    return score
+    x_location = coordinates[:, 0].astype(int)
+    y_location = coordinates[:, 1].astype(int)
+    min_x = min(x_location)
+    min_y = min(y_location)
+    x_location = x_location - min_x
+    y_location = y_location - min_y
+    col = max(np.unique(x_location))
+    row = max(np.unique(y_location))
+    im = np.zeros((col + 1, row + 1))
+    im[:] = 0
+    for i in range(len(x_location)):
+        im[x_location[i], y_location[i]] = peaks[i]
+    if stretch_contrast:
+        im = contrast_stretching(im, contrast_lim)
+    if remove_whitespace:
+        im = whitespace_removal(im)
+    if interpolation != 'None':
+        im = image_interpolation(im, method=interpolation, blur_filter=blur_filter, fill_value=fill_value)
+    return im
 
 
-def get_peak_ranks(feature_table: pd.DataFrame):
+def image_interpolation(
+        image: np.ndarray,
+        method='blur',
+        blur_filter=(2, 2),
+        fill_value=0
+):
     """
-    This is an example of how to get structued ion image from feature table.
-
     Parameters:
 
-        feature_table: a DataFrame object
+        fill_value:
+        method:
+        blur_filter:
+        image: a 2D image, from which the edge whitespace have already been removed.
 
-    Returns:
+    Return:
 
-        t_df: structure scores for each ion image
-
-        deflated_arr: a 3d array with ion image ravelled
-
+        the image with missing values interpolated
     """
 
-    dirty_df = feature_table
+    if method == 'blur':
 
-    spot = dirty_df[['x', 'y']].to_numpy()
+        image[np.isnan(image)] = fill_value
 
-    arr = dirty_df.drop(columns=['x', 'y']).to_numpy()
+        kernel = np.ones((blur_filter[0], (blur_filter[1])), np.float32) / (
+                blur_filter[0] * blur_filter[1])
 
-    mzs = list(dirty_df.drop(columns=['x', 'y']).columns)
-    mzs = np.array([float(mz) for mz in mzs])
+        interp_image = cv2.filter2D(image, -1, kernel)
 
-    t = dict()
+    else:
+        h, w = image.shape[:2]
+        xx, yy = np.meshgrid(np.arange(w), np.arange(h))
 
-    deflated_arr = list()
+        image = np.ma.masked_invalid(image)
 
-    for mz in tqdm.tqdm(list(mzs)):
-        test = arr[:, mzs == mz]
-        image = de_flatten(spot, test)
+        known_x = xx[~image.mask]
+        known_y = yy[~image.mask]
+        known_v = image[~image.mask]
+        missing_x = xx[image.mask]
+        missing_y = yy[image.mask]
 
-        image = contrast_stretching(image)
+        interp_values = interpolate.griddata(
+            (known_x, known_y), known_v, (missing_x, missing_y),
+            method=method, fill_value=fill_value
+        )
 
-        image = remove_whitespace(image)
-
-        # image = interpolate_missing_pixels(image)
-
-        q = 4
-
-        score = cal_structure_score(image, q)
-
-        deflated_arr.append(image)
-
-        t[mz] = score
-
-    t_df = pd.DataFrame.from_dict(t, orient='index')
-
-    deflated_arr = np.array(deflated_arr)
-
-    deflated_arr[np.isnan(deflated_arr)] = 0
-
-    return t_df, deflated_arr
-
-
-def sel_peak_by_rank(t_df, deflated_arr, feature_table: pd.DataFrame, threshold):
-    """
-    Select the structured peaks (thus more meaningful) in the feature table and return the result
-
-    Parameters:
-    --------
-        t_df: a DataFrame object with ranked mass-to-charge ratios
-
-        feature_table: a Dataframe object
-
-        threshold: above which the peaks will be preserved
-
-    Returns:
-    --------
-        feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
-
-        deflated_arr_picked: an array with picked ion images
-    """
-
-    t_df_arr = t_df.to_numpy().flatten()
-
-    mask = t_df_arr >= threshold
-
-    deflated_arr_picked = deflated_arr[mask]
-
-    deflated_arr_picked = np.array(deflated_arr_picked)
-
-    t_df = t_df[t_df >= threshold]
-
-    t_df = t_df.dropna()
-
-    sel_mzs = list(t_df.index)
-
-    sel_mzs.extend(['x', 'y'])
-
-    sel_columns = [col for col in list(feature_table.columns) if col in sel_mzs]
-
-    feature_table_picked = feature_table[sel_columns]
-
-    return feature_table_picked, deflated_arr_picked
+        interp_image = image.copy()
+        interp_image[missing_y, missing_x] = interp_values
+    return interp_image
