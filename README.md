@@ -86,10 +86,8 @@ basis, components, G = nmf(ims, feature_table, rk, n_run=20)
 
 ## Notes:
 
-- Setting a higher `beta` parameter in Nimfa.Snmf() results in a more sparse matrix, useful in identify key peaks in reconstructed mass spectra.
 
 ## Credits
 
 - [francisbrochu/msvlm](https://github.com/francisbrochu/msvlm) for the `Spectrum` Class
 
-- [mims-harvard/nimfa](https://github.com/mims-harvard/nimfa) for the NMF analysis

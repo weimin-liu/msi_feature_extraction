@@ -4,8 +4,6 @@ channels:
 dependencies:
   - python=3.8
   - matplotlib
-  - networkx
-  - nimfa
   - numpy
   - pandas
   - pip

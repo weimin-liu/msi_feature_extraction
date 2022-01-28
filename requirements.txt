@@ -7,5 +7,3 @@ scipy~=1.7.3
 setuptools
 tqdm~=4.62.3
 scikit-image~=0.19.1
-networkx~=2.6.3
-nimfa~=1.4.0
