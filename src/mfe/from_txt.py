@@ -421,7 +421,7 @@ def create_bin(spot, spectrum: Spectrum, ref_peaks, tol=10):
     return spot, spectrum_bin
 
 
-def create_feature_table(spectrum_dict: dict, ref_peaks) -> typing.Tuple[pd.DataFrame, pd.DataFrame]:
+def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10) -> typing.Tuple[pd.DataFrame, pd.DataFrame]:
     """
     create binned feature table with designated bin size
     Parameters:
@@ -429,6 +429,8 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> typing.Tuple[pd.Data
         ref_peaks: a list of reference peak to which the samples aligned
 
         spectrum_dict: a dictionary object with key as spot coordinates and spectrum as value
+
+        tol
 
     Returns:
     --------
@@ -455,7 +457,7 @@ def create_feature_table(spectrum_dict: dict, ref_peaks) -> typing.Tuple[pd.Data
 
         print("Binning the spectrum...")
 
-        bin_spectrum_dict = mp_wrapper(create_bin, spectrum_dict, ref_peaks)
+        bin_spectrum_dict = mp_wrapper(create_bin, spectrum_dict, ref_peaks, tol)
 
         bin_spectrum_dict = {key: bin_spectrum_dict[key][1] for key in bin_spectrum_dict.keys()}
 
