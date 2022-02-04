@@ -601,8 +601,6 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
     me = list()
 
-    mstd = list()
-
     spar = list()
 
     for peak_th in tqdm.tqdm(peak_th_candidates):
@@ -617,7 +615,7 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
         cover.append(coverage['TIC_coverage'].mean())
 
-        me.append(err_table.drop(columns=['x', 'y']).abs(skipna=True).mean(skipna=True).mean(skipna=True))
+        me.append(err_table.drop(columns=['x', 'y']).abs().mean(skipna=True).mean(skipna=True))
 
         spar.append((feature_table.drop(columns=['x', 'y']).to_numpy() == 0).mean())
 
