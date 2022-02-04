@@ -617,9 +617,7 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
         cover.append(coverage['TIC_coverage'].mean())
 
-        me.append(err_table.drop(columns=['x', 'y']).mean(skipna=True).mean(skipna=True))
-
-        mstd.append(err_table.drop(columns=['x', 'y']).std(skipna=True).mean(skipna=True))
+        me.append(err_table.drop(columns=['x', 'y']).abs(skipna=True).mean(skipna=True).mean(skipna=True))
 
         spar.append((feature_table.drop(columns=['x', 'y']).to_numpy() == 0).mean())
 
@@ -627,7 +625,6 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
         'n_ref': n_ref,
         'tic_coverage': cover,
         'mean_error': me,
-        'mean_std': mstd,
         'sparsity': spar
     }
 
