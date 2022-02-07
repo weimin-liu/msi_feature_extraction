@@ -152,7 +152,9 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus']
 
-    summary = {}
+    summary = {
+        'rank': rank
+    }
 
     for i in range(len(mean_out)):
         summary[result_name[i]] = mean_out[i]
