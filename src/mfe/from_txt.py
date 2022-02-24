@@ -554,26 +554,52 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
 
         cluster.append(mzs_all[left:right])
 
-    ref_peaks = []
+    ref_peaks = dict()
+
+    if isinstance(peak_th, float):
+
+        ref_peaks[peak_th] = list()
+
+    elif isinstance(peak_th, list):
+
+        for th in peak_th:
+
+            ref_peaks[th] = list()
 
     for c in cluster:
+
         x, y = FFTKDE(kernel='gaussian', bw='ISJ').fit(c).evaluate()
 
         # TODO: add smoothing before peak detection
         y = (y - np.min(y)) / (np.max(y) - np.min(y))
 
-        peak_th = peak_th
+        if isinstance(peak_th, float):
+            peak_th = peak_th
 
-        if peak_picking_method == 'height':
-            peaks, _ = signal.find_peaks(y, height=peak_th)
-        elif peak_picking_method == 'prominence':
-            peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
+            if peak_picking_method == 'height':
+                peaks, _ = signal.find_peaks(y, height=peak_th)
+            elif peak_picking_method == 'prominence':
+                peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
+            else:
+                raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
+
+            ref_peaks[peak_th].extend([round(x[i], 4) for i in peaks])
+
+        elif isinstance(peak_th, list):
+            for th in peak_th:
+                if peak_picking_method == 'height':
+                    peaks, _ = signal.find_peaks(y, height=th)
+                elif peak_picking_method == 'prominence':
+                    peaks, _ = signal.find_peaks(y, prominence=(th, None))
+                else:
+                    raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
+
+                ref_peaks[th].extend([round(x[i], 4) for i in peaks])
         else:
-            raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
+            raise NotImplementedError
 
-        ref_peaks.extend([round(x[i], 4) for i in peaks])
-
-    ref_peaks = np.sort(ref_peaks)
+    for key in ref_peaks:
+        ref_peaks[key] = np.sort(ref_peaks[key])
 
     return ref_peaks
 
@@ -604,28 +630,37 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
     # TODO: add sanity check before processing
 
-    n_ref = list()
-
     cover = list()
 
     me = list()
 
     spar = list()
 
-    for peak_th in tqdm.tqdm(peak_th_candidates):
-        ref = get_ref_peaks(raw_data, peak_picking_method=peak_picking_method, peak_th=peak_th)
+    ref = get_ref_peaks(raw_data, peak_picking_method=peak_picking_method, peak_th=peak_th_candidates)
 
-        n_ref.append(len(ref))
+    n_ref = [len(ref[key]) for key in ref]
 
-        feature_table, err_table = create_feature_table(raw_data, ref)
+    min_pth = np.min(peak_th_candidates)
 
-        coverage = peak_alignment_evaluation(raw_data, feature_table)
+    feature_table, err_table = create_feature_table(raw_data, ref[min_pth])
+
+    for key in ref:
+
+        feature_table_sub = feature_table[ref[key]]
+
+        feature_table_sub[['x', 'y']] = feature_table[['x', 'y']]
+
+        err_table_sub = err_table[ref[key]]
+
+        err_table_sub[['x', 'y']] = err_table[['x', 'y']]
+
+        coverage = peak_alignment_evaluation(raw_data, feature_table_sub)
 
         cover.append(coverage['TIC_coverage'].mean())
 
-        me.append(err_table.drop(columns=['x', 'y']).abs().mean(skipna=True).mean(skipna=True))
+        me.append(err_table_sub.drop(columns=['x', 'y']).abs().mean(skipna=True).mean(skipna=True))
 
-        spar.append((feature_table.drop(columns=['x', 'y']).to_numpy() == 0).mean())
+        spar.append((feature_table_sub.drop(columns=['x', 'y']).to_numpy() == 0).mean())
 
     return {
         'n_ref': n_ref,
