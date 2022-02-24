@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-
 def imshow(array: np.ndarray, fill=0) -> np.ndarray:
     """
 
@@ -87,5 +86,3 @@ class CorSolver:
         """
         dst_coordinate = src_coordinate.dot(self.transformation_matrix.T) + self.translation_vector
         return np.round(dst_coordinate, 0)
-
-
