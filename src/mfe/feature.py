@@ -57,8 +57,8 @@ def cal_evar(rss, V):
 
 
 def cal_cophenetic(C):
-    X = C  # Original data (1000 observations)
-    Z = sch.linkage(X)  # Clustering
+    X = C
+    Z = sch.linkage(X)
     orign_dists = ssd.pdist(X)  # Matrix of original distances between observations
     cophe_dists = sch.cophenet(Z)  # Matrix of cophenetic distances between observations
     corr_coef = np.corrcoef(orign_dists, cophe_dists)[0, 1]
@@ -152,7 +152,9 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus']
 
-    summary = {}
+    summary = {
+        'rank': rank
+    }
 
     for i in range(len(mean_out)):
         summary[result_name[i]] = mean_out[i]
@@ -167,7 +169,7 @@ def clean_axis(ax):
         sp.set_visible(False)
 
 
-def save_consensus(C, prefix, dpi=600):
+def save_consensus(C, prefix):
 
     r_C = 1 - C
 
@@ -195,4 +197,4 @@ def save_consensus(C, prefix, dpi=600):
 
     cb.set_label('Distance', fontsize=20)
 
-    plt.savefig(f'{prefix}_consensus', dpi=dpi)
+    plt.savefig(f'{prefix}_consensus.svg', format='svg')
