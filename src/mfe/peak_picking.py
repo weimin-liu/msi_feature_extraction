@@ -3,11 +3,16 @@ import itertools
 import numpy as np
 import pandas as pd
 import tqdm
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from scipy import interpolate
 from skimage.feature import graycomatrix, graycoprops
 from scipy.interpolate import interpolate
 from skimage.exposure import exposure
 import cv2
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import StandardScaler
 
 
 class GLCMPeakRanking:
@@ -40,7 +45,7 @@ class GLCMPeakRanking:
         self.feature_table = pd.DataFrame()
         self.images = list()
         self.results = list()
-        self.prop = ['dissimilarity', 'homogeneity', 'energy',  'correlation']
+        self.prop = ['dissimilarity', 'homogeneity', 'energy', 'correlation']
         self.mzs = np.array([])
 
     def fit(self, feature_table: pd.DataFrame, dist, angle):
@@ -153,6 +158,82 @@ class GLCMPeakRanking:
                 result.append(np.nan)
 
         self.results.append(result)
+
+    def fancy_overview(self, save_path, xlim, ylim):
+        results = pd.DataFrame(self.results)
+        results = results.dropna()
+        results.index = self.mzs[list(results.index)]
+        similarities = pd.DataFrame(cosine_similarity(results), index=results.index, columns=list(results.index))
+        pca = PCA(n_components=2)
+        X = StandardScaler().fit_transform(results)
+        pc = pca.fit_transform(X)
+        pc = pd.DataFrame(pc, index=results.index)
+        coef = pd.DataFrame(pca.components_.T)
+        coef['label'] = coef.index.map(lambda x: x % 4)
+        color = ['red', 'green', 'black', 'orange']
+        fig = plt.figure()
+        ax = fig.add_subplot(111, label='1')
+        ax2 = fig.add_subplot(111, label='2', frame_on=False)
+        xs = pc.iloc[:, 0]
+        ys = pc.iloc[:, 1]
+        n = len(coef)
+        scalex = 1.0 / (xs.max() - xs.min())
+        scaley = 1.0 / (ys.max() - ys.min())
+        sc = ax.scatter(xs * scalex, ys * scaley, alpha=0.5, c=similarities[0], vmin=0.9, vmax=1)
+
+        ax.set_xlabel(f'PC1 ({round(100 * pca.explained_variance_ratio_[0], 2)}%)')
+        ax.set_ylabel(f'PC2 ({round(100 * pca.explained_variance_ratio_[1], 2)}%)')
+        ax.set_xticks([-1, 0, 1])
+        ax.set_yticks([-1, 0, 1])
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        for i in range(n):
+            ax2.arrow(0, 0, coef.iloc[i, 0], coef.iloc[i, 1], color=color[coef.loc[i, 'label']], alpha=0.5,
+                      linewidth=0.1)
+        ax2.xaxis.tick_top()
+        ax2.yaxis.tick_right()
+        ax2.set_xlim(xlim)
+        ax2.set_ylim(ylim)
+        ax2.set_xticks([xlim[0], 0, xlim[1]])
+        ax2.set_yticks([ylim[0], 0, ylim[1]])
+
+        ax2.xaxis.set_label_position('top')
+        ax2.yaxis.set_label_position('right')
+
+        legend_elements = [Line2D([0], [0], color='red', lw=1, label='dissimilarity'),
+                           Line2D([0], [0], color='green', lw=1, label='homogeneity'),
+                           Line2D([0], [0], color='black', lw=1, label='energy'),
+                           Line2D([0], [0], color='orange', lw=1, label='correlation')]
+        ax.legend(handles=legend_elements, loc='lower right', fancybox=True, shadow=True)
+        plt.grid()
+        cbar_ax = fig.add_axes([0.15, 0.8, 0.2, 0.03])
+        cbar = fig.colorbar(sc, cax=cbar_ax, orientation='horizontal')
+        cbar.ax.set_xticks([0.9, 1])
+        cbar.ax.set_yticks([])
+        cbar.ax.set_xticklabels(['far', 'near'])
+        plt.savefig(save_path, format='svg')
+        plt.show()
+
+    @property
+    def distance(self) -> pd.DataFrame:
+        results = pd.DataFrame(self.results)
+        results = results.dropna()
+        results.index = self.mzs[list(results.index)]
+        similarities = pd.DataFrame(cosine_similarity(results), index=results.index, columns=list(results.index))
+        distance = similarities[0].iloc[:-1]
+        distance = distance.sort_values(ascending=False)
+        return distance
+
+    def mz_at_percentile(self, percentile: list) -> list:
+        mzs = [
+            list(self.distance[self.distance >= self.distance.sort_values(ascending=False).quantile(i / 100)].index)[-1]
+            for i in percentile]
+        return mzs
+
+    def mzs_above_percentile(self, percentile: int) -> list:
+        mzs = list(
+            self.distance[self.distance >= self.distance.sort_values(ascending=False).quantile(percentile / 100)].index)
+        return mzs
 
     # def transform(self, threshold):
     #     """
