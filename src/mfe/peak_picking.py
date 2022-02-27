@@ -1,23 +1,21 @@
+import itertools
+
 import numpy as np
 import pandas as pd
 import tqdm
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from scipy import interpolate
-from skimage.feature import graycomatrix
+from skimage.feature import graycomatrix, graycoprops
 from scipy.interpolate import interpolate
 from skimage.exposure import exposure
 import cv2
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import StandardScaler
 
 
 class GLCMPeakRanking:
-    # === The matrix used to calculate texture score === #
-    C = np.array([
-        [4, 2, 1, 0, 0],
-        [2, 1, 0, 0, 0],
-        [1, 0, 0, 0, 1],
-        [0, 0, 0, 1, 2],
-        [0, 0, 1, 2, 4]
-    ])
-
     def __init__(self,
                  fill_value=0,
                  interpolation='blur',
@@ -37,36 +35,27 @@ class GLCMPeakRanking:
             bins with a number of q, and the intensities are then replaced with the label (integer number). Currently,
             q is fixed to 5 for the convenience of the following structure score calculation.
         """
-        if self.C.shape[0] == self.C.shape[0] == q:
-            self.interpolation = interpolation
-            self.fill_value = fill_value
-            self.remove_whitespace = remove_whitespace
-            self.stretch_contrast = stretch_contrast
-            self.contrast_lim = contrast_lim
-            self.blur_filter = blur_filter
-            self.q = q
-            self.feature_table = pd.DataFrame()
-            self.images = list()
-            self.score = pd.DataFrame()
-            self.mzs = np.array([])
-        else:
-            raise ValueError('The number of zones are not equal to the calculation matrix!')
+        self.interpolation = interpolation
+        self.fill_value = fill_value
+        self.remove_whitespace = remove_whitespace
+        self.stretch_contrast = stretch_contrast
+        self.contrast_lim = contrast_lim
+        self.blur_filter = blur_filter
+        self.q = q
+        self.feature_table = pd.DataFrame()
+        self.images = list()
+        self.results = list()
+        self.prop = ['dissimilarity', 'homogeneity', 'energy', 'correlation']
+        self.mzs = np.array([])
 
-    def _reset(self):
-        if len(self.score) != 0:
-            del self.feature_table
-            del self.images
-            del self.score
-
-    def fit(self, feature_table: pd.DataFrame, angle=0):
+    def fit(self, feature_table: pd.DataFrame, dist, angle):
         """
         Parameters:
         --------
         """
-        self._reset()
-        return self.partial_fit(feature_table, angle=angle)
+        return self.partial_fit(feature_table, dist, angle)
 
-    def partial_fit(self, feature_table: pd.DataFrame, angle=0):
+    def partial_fit(self, feature_table: pd.DataFrame, dist, angle):
         """
         This is an example of how to get structured ion image from feature table.
 
@@ -91,9 +80,8 @@ class GLCMPeakRanking:
         arr = dirty_df.drop(columns=['x', 'y']).to_numpy()
 
         mzs = list(dirty_df.drop(columns=['x', 'y']).columns)
-        self.mzs = np.array([float(mz) for mz in mzs])
 
-        t = dict()
+        self.mzs = np.array([float(mz) for mz in mzs])
 
         print('Processing each ion image')
 
@@ -108,43 +96,15 @@ class GLCMPeakRanking:
                                blur_filter=self.blur_filter,
                                fill_value=self.fill_value)
 
-            score = self.cal_structure_score(image, angle)
+            self.cal_glcm_prop(image, dist, angle)
 
             self.images.append(image)
-
-            t[mz] = score
-
-        self.score = pd.DataFrame.from_dict(t, orient='index')
 
         self.images = np.array(self.images)
 
         self.images[np.isnan(self.images)] = 0
 
-    @property
-    def mzs_sorted(self):
-        """
-        Return mz values of the ion images sorted by ranking structured score
-
-        Returns:
-        """
-        score_sorted = self.score.sort_values(by=0, ascending=False)
-        mzs_sorted = np.array(list(score_sorted.index))
-        return mzs_sorted
-
-    @property
-    def images_sorted(self):
-        """
-        return image arrays that are sorted by ranking structured score
-
-        Returns:
-
-        """
-        score = self.score.to_numpy().flatten()
-        score_increase = score.argsort()
-        images_sorted = self.images[score_increase[::-1]]
-        return images_sorted
-
-    def cal_structure_score(self, image, angle):
+    def cal_glcm_prop(self, image, dist, angle):
         """
         Quantize the image and then calculate its structure score using grey-level co-occurrence matrix. See
         https://scikit-image.org/docs/0.7.0/api/skimage.feature.texture.html
@@ -159,17 +119,18 @@ class GLCMPeakRanking:
             The structure score of the image. The higher the score, the more structured the ion image.
 
         """
-        nan_flg = False
 
         df = pd.DataFrame(image.reshape(-1, 1))
 
         n_spots = np.count_nonzero(df[0].to_numpy())
 
-        bin_labels = list(range(self.q))
+        bin_labels = list(range(1, self.q + 1))
+
+        result = list()
 
         if n_spots == 0:
 
-            score = 0
+            result.append(np.nan)
 
         else:
 
@@ -178,74 +139,142 @@ class GLCMPeakRanking:
                 if df[0].min() == 0:
                     df = df.replace(0, np.nan)
 
-                    nan_flg = True
-
                 df['quantile_ex_1'] = pd.qcut(df[0], q=self.q, labels=bin_labels, duplicates='drop')
 
                 im_quantized = df['quantile_ex_1'].to_numpy().reshape(image.shape)
 
-                im_quantized[np.isnan(im_quantized)] = self.q
+                im_quantized[np.isnan(im_quantized)] = 0
 
                 im_quantized = im_quantized.astype(int)
 
-                if nan_flg:
+                gcm = graycomatrix(im_quantized, dist, angle, levels=self.q + 1)
 
-                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q + 1)[:, :, 0, 0]
+                for d, theta in itertools.product(range(len(dist)), range(len(angle))):
 
-                    gcm = gcm[0:-1, 0:-1]
-
-                else:
-
-                    gcm = graycomatrix(im_quantized, [1], [angle], levels=self.q)[:, :, 0, 0]
-
-                score = np.sum(np.multiply(gcm, self.C)) / n_spots
+                    for key in self.prop:
+                        result.append(graycoprops(gcm, key)[d, theta])
 
             except ValueError:
+                result.append(np.nan)
 
-                score = 0
+        self.results.append(result)
 
-        return score
+    def fancy_overview(self, save_path, xlim, ylim):
+        results = pd.DataFrame(self.results)
+        results = results.dropna()
+        results.index = self.mzs[list(results.index)]
+        similarities = pd.DataFrame(cosine_similarity(results), index=results.index, columns=list(results.index))
+        pca = PCA(n_components=2)
+        X = StandardScaler().fit_transform(results)
+        pc = pca.fit_transform(X)
+        pc = pd.DataFrame(pc, index=results.index)
+        coef = pd.DataFrame(pca.components_.T)
+        coef['label'] = coef.index.map(lambda x: x % 4)
+        color = ['red', 'green', 'black', 'orange']
+        fig = plt.figure()
+        ax = fig.add_subplot(111, label='1')
+        ax2 = fig.add_subplot(111, label='2', frame_on=False)
+        xs = pc.iloc[:, 0]
+        ys = pc.iloc[:, 1]
+        n = len(coef)
+        scalex = 1.0 / (xs.max() - xs.min())
+        scaley = 1.0 / (ys.max() - ys.min())
+        sc = ax.scatter(xs * scalex, ys * scaley, alpha=0.5, c=similarities[0], vmin=0.9, vmax=1)
 
-    def transform(self, threshold):
-        """
-        Select the structured peaks (thus more meaningful) in the feature table and return the result
+        ax.set_xlabel(f'PC1 ({round(100 * pca.explained_variance_ratio_[0], 2)}%)')
+        ax.set_ylabel(f'PC2 ({round(100 * pca.explained_variance_ratio_[1], 2)}%)')
+        ax.set_xticks([-1, 0, 1])
+        ax.set_yticks([-1, 0, 1])
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        for i in range(n):
+            ax2.arrow(0, 0, coef.iloc[i, 0], coef.iloc[i, 1], color=color[coef.loc[i, 'label']], alpha=0.5,
+                      linewidth=0.1)
+        ax2.xaxis.tick_top()
+        ax2.yaxis.tick_right()
+        ax2.set_xlim(xlim)
+        ax2.set_ylim(ylim)
+        ax2.set_xticks([xlim[0], 0, xlim[1]])
+        ax2.set_yticks([ylim[0], 0, ylim[1]])
 
-        Parameters:
-        --------
-            t_df: a DataFrame object with ranked mass-to-charge ratios
+        ax2.xaxis.set_label_position('top')
+        ax2.yaxis.set_label_position('right')
 
-            feature_table: a Dataframe object
+        legend_elements = [Line2D([0], [0], color='red', lw=1, label='dissimilarity'),
+                           Line2D([0], [0], color='green', lw=1, label='homogeneity'),
+                           Line2D([0], [0], color='black', lw=1, label='energy'),
+                           Line2D([0], [0], color='orange', lw=1, label='correlation')]
+        ax.legend(handles=legend_elements, loc='lower right', fancybox=True, shadow=True)
+        plt.grid()
+        cbar_ax = fig.add_axes([0.15, 0.8, 0.2, 0.03])
+        cbar = fig.colorbar(sc, cax=cbar_ax, orientation='horizontal')
+        cbar.ax.set_xticks([0.9, 1])
+        cbar.ax.set_yticks([])
+        cbar.ax.set_xticklabels(['far', 'near'])
+        plt.savefig(save_path, format='svg')
+        plt.show()
 
-            threshold: above which the peaks will be preserved
+    @property
+    def distance(self) -> pd.DataFrame:
+        results = pd.DataFrame(self.results)
+        results = results.dropna()
+        results.index = self.mzs[list(results.index)]
+        similarities = pd.DataFrame(cosine_similarity(results), index=results.index, columns=list(results.index))
+        distance = similarities[0].iloc[:-1]
+        distance = distance.sort_values(ascending=False)
+        return distance
 
-        Returns:
-        --------
-            feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
+    def mz_at_percentile(self, percentile: list) -> list:
+        mzs = [
+            list(self.distance[self.distance >= self.distance.sort_values(ascending=False).quantile(i / 100)].index)[-1]
+            for i in percentile]
+        return mzs
 
-            deflated_arr_picked: an array with picked ion images
-        """
+    def mzs_above_percentile(self, percentile: int) -> list:
+        mzs = list(
+            self.distance[self.distance >= self.distance.sort_values(ascending=False).quantile(percentile / 100)].index)
+        return mzs
 
-        t_df_arr = self.score.to_numpy().flatten()
-
-        mask = t_df_arr >= threshold
-
-        images_picked = self.images[mask]
-
-        images_picked = np.array(images_picked)
-
-        t_df = self.score[self.score >= threshold]
-
-        t_df = t_df.dropna()
-
-        sel_mzs = list(t_df.index)
-
-        sel_mzs.extend(['x', 'y'])
-
-        sel_columns = [col for col in list(self.feature_table.columns) if col in sel_mzs]
-
-        feature_table_picked = self.feature_table[sel_columns]
-
-        return feature_table_picked, images_picked
+    # def transform(self, threshold):
+    #     """
+    #     Select the structured peaks (thus more meaningful) in the feature table and return the result
+    #
+    #     Parameters:
+    #     --------
+    #         t_df: a DataFrame object with ranked mass-to-charge ratios
+    #
+    #         feature_table: a Dataframe object
+    #
+    #         threshold: above which the peaks will be preserved
+    #
+    #     Returns:
+    #     --------
+    #         feature_table_picked: a Dataframe object with only peaks that have above threshold structure score
+    #
+    #         deflated_arr_picked: an array with picked ion images
+    #     """
+    #
+    #     t_df_arr = self.score.to_numpy().flatten()
+    #
+    #     mask = t_df_arr >= threshold
+    #
+    #     images_picked = self.images[mask]
+    #
+    #     images_picked = np.array(images_picked)
+    #
+    #     t_df = self.score[self.score >= threshold]
+    #
+    #     t_df = t_df.dropna()
+    #
+    #     sel_mzs = list(t_df.index)
+    #
+    #     sel_mzs.extend(['x', 'y'])
+    #
+    #     sel_columns = [col for col in list(self.feature_table.columns) if col in sel_mzs]
+    #
+    #     feature_table_picked = self.feature_table[sel_columns]
+    #
+    #     return feature_table_picked, images_picked
 
 
 def whitespace_removal(image: np.ndarray):
