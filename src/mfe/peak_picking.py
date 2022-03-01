@@ -45,7 +45,7 @@ class GLCMPeakRanking:
         self.feature_table = pd.DataFrame()
         self.images = list()
         self.results = list()
-        self.prop = ['dissimilarity', 'homogeneity', 'energy', 'correlation']
+        self.prop = ['contrast', 'homogeneity', 'energy', 'correlation']
         self.mzs = np.array([])
 
     def fit(self, feature_table: pd.DataFrame, dist, angle):
@@ -200,7 +200,7 @@ class GLCMPeakRanking:
         ax2.xaxis.set_label_position('top')
         ax2.yaxis.set_label_position('right')
 
-        legend_elements = [Line2D([0], [0], color='red', lw=1, label='dissimilarity'),
+        legend_elements = [Line2D([0], [0], color='red', lw=1, label='contrast'),
                            Line2D([0], [0], color='green', lw=1, label='homogeneity'),
                            Line2D([0], [0], color='black', lw=1, label='energy'),
                            Line2D([0], [0], color='orange', lw=1, label='correlation')]
