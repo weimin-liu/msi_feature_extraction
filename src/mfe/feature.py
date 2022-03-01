@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt, gridspec
 from sklearn.decomposition import NMF
 import numpy as np
 import tqdm
+from scipy.stats.stats import pearsonr
 
 
 def predict_H(H):
@@ -90,10 +91,26 @@ def cal_featureScore_kim(W):
     return s_list
 
 
+def average_WH(W_avg, H_avg, W, H):
+    min_corr = 1
+    rank = W.shape[1]
+    corr = np.zeros([rank, rank])
+    for m, n in itertools.product(range(rank), range(rank)):
+        r, _ = pearsonr(W[:, m], W_avg[:, n])
+        corr[m, n] = r
+    for i in range(rank):
+        j = np.argmax(corr[:, i])
+        min_corr = min(min_corr, corr[j, i])
+        W_avg[:, i] = (W_avg[:, i] + W[:, j]) / 2
+        H_avg[i, :] = (H_avg[i, :] + H[j, :]) / 2
+    return W_avg, H_avg, min_corr
+
+
 def repeated_nmf(V, rank, n_run, *args, **kwargs):
     """
 
     Args:
+        n_run:
         W:
         rank:
         n:
@@ -105,12 +122,29 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     consensus = np.zeros((V.shape[1], V.shape[1]))
 
+    W_avg = 0
+
+    H_avg = 0
+
+    min_corr = list()
+
     for i in tqdm.tqdm(range(n_run)):
         model = NMF(n_components=rank, random_state=i, *args, **kwargs)
 
         W = model.fit_transform(V)
 
         H = model.components_
+
+        if isinstance(W_avg, int):
+            W_avg = W
+            H_avg = H
+        elif isinstance(W_avg, np.ndarray):
+            W_avg, H_avg, corr = average_WH(W_avg, H_avg, W, H)
+
+            min_corr.append(corr)
+
+        else:
+            raise NotImplementedError
 
         consensus += cal_conectivity(H, predict_H(H)[0])
 
@@ -150,7 +184,13 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     mean_out.append(consensus)
 
-    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus']
+    mean_out.append(W_avg)
+
+    mean_out.append(H_avg)
+
+    mean_out.append(min_corr)
+
+    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus','W_avg','H_avg','min_corr']
 
     summary = {
         'rank': rank
@@ -170,7 +210,6 @@ def clean_axis(ax):
 
 
 def save_consensus(C, prefix):
-
     r_C = 1 - C
 
     fig = plt.figure(figsize=(13.9, 10))
