@@ -91,19 +91,24 @@ def cal_featureScore_kim(W):
     return s_list
 
 
-def average_WH(W_avg, H_avg, W, H):
-    min_corr = 1
-    rank = W.shape[1]
-    corr = np.zeros([rank, rank])
-    for m, n in itertools.product(range(rank), range(rank)):
-        r, _ = pearsonr(W[:, m], W_avg[:, n])
+def accum_WH(W_accum, H_accum, W, H, accum_time, tol=0.9):
+
+    corr = np.zeros([W_accum.shape[1],W.shape[1]])
+    for m, n in itertools.product(range(W_accum.shape[1]),range(W.shape[1])):
+        r, _ = pearsonr(W_accum[:, m], W[:, n])
         corr[m, n] = r
-    for i in range(rank):
+    for i in range(W.shape[1]):
         j = np.argmax(corr[:, i])
-        min_corr = min(min_corr, corr[j, i])
-        W_avg[:, i] = (W_avg[:, i] + W[:, j]) / 2
-        H_avg[i, :] = (H_avg[i, :] + H[j, :]) / 2
-    return W_avg, H_avg, min_corr
+        if corr[j, i] >= tol:
+            accum_time[j] = accum_time[j] + 1
+            W_accum[:, j] = W_accum[:, j] + W[:, i]
+            H_accum[j, :] = H_accum[j, :] + H[i, :]
+        else:
+            accum_time.append(0)
+            W_accum = np.c_[W_accum, W[:, i]]
+            H_accum = np.c_[H_accum.T, H.T[:, i]].T
+
+    return W_accum, H_accum, accum_time
 
 
 def repeated_nmf(V, rank, n_run, *args, **kwargs):
@@ -119,14 +124,14 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     """
     out_list = []
-
+    accum_time = list()
+    for i in range(rank):
+        accum_time.append(0)
     consensus = np.zeros((V.shape[1], V.shape[1]))
 
-    W_avg = 0
+    W_accum = 0
 
-    H_avg = 0
-
-    min_corr = list()
+    H_accum = 0
 
     for i in tqdm.tqdm(range(n_run)):
         model = NMF(n_components=rank, random_state=i, *args, **kwargs)
@@ -135,13 +140,11 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
         H = model.components_
 
-        if isinstance(W_avg, int):
-            W_avg = W
-            H_avg = H
-        elif isinstance(W_avg, np.ndarray):
-            W_avg, H_avg, corr = average_WH(W_avg, H_avg, W, H)
-
-            min_corr.append(corr)
+        if isinstance(W_accum, int):
+            W_accum = W
+            H_accum = H
+        elif isinstance(W_accum, np.ndarray):
+            W_accum, H_accum, accum_time = accum_WH(W_accum, H_accum, W, H, accum_time)
 
         else:
             raise NotImplementedError
@@ -184,13 +187,13 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     mean_out.append(consensus)
 
-    mean_out.append(W_avg)
+    mean_out.append(W_accum)
 
-    mean_out.append(H_avg)
+    mean_out.append(H_accum)
 
-    mean_out.append(min_corr)
+    mean_out.append(accum_time)
 
-    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus','W_avg','H_avg','min_corr']
+    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus','W_accum','H_accum','accum_time']
 
     summary = {
         'rank': rank
