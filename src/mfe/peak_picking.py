@@ -45,7 +45,7 @@ class GLCMPeakRanking:
         self.feature_table = pd.DataFrame()
         self.images = list()
         self.results = list()
-        self.prop = ['contrast', 'homogeneity', 'energy', 'correlation']
+        self.prop = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']
         self.mzs = np.array([])
 
     def fit(self, feature_table: pd.DataFrame, dist, angle):
@@ -169,8 +169,8 @@ class GLCMPeakRanking:
         pc = pca.fit_transform(X)
         pc = pd.DataFrame(pc, index=results.index)
         coef = pd.DataFrame(pca.components_.T)
-        coef['label'] = coef.index.map(lambda x: x % 4)
-        color = ['red', 'green', 'black', 'orange']
+        coef['label'] = coef.index.map(lambda x: x % len(self.prop))
+        color = ['g', 'k', 'm', 'y', 'c']
         fig = plt.figure()
         ax = fig.add_subplot(111, label='1')
         ax2 = fig.add_subplot(111, label='2', frame_on=False)
@@ -179,7 +179,7 @@ class GLCMPeakRanking:
         n = len(coef)
         scalex = 1.0 / (xs.max() - xs.min())
         scaley = 1.0 / (ys.max() - ys.min())
-        sc = ax.scatter(xs * scalex, ys * scaley, alpha=0.5, c=similarities[0], vmin=0.9, vmax=1)
+        sc = ax.scatter(xs * scalex, ys * scaley, alpha=0.5, c=similarities[0], vmin=similarities[0].quantile(0.15), vmax=similarities[0].quantile(0.85),cmap='jet')
 
         ax.set_xlabel(f'PC1 ({round(100 * pca.explained_variance_ratio_[0], 2)}%)')
         ax.set_ylabel(f'PC2 ({round(100 * pca.explained_variance_ratio_[1], 2)}%)')
@@ -200,15 +200,15 @@ class GLCMPeakRanking:
         ax2.xaxis.set_label_position('top')
         ax2.yaxis.set_label_position('right')
 
-        legend_elements = [Line2D([0], [0], color='red', lw=1, label='contrast'),
-                           Line2D([0], [0], color='green', lw=1, label='homogeneity'),
-                           Line2D([0], [0], color='black', lw=1, label='energy'),
-                           Line2D([0], [0], color='orange', lw=1, label='correlation')]
-        ax.legend(handles=legend_elements, loc='lower right', fancybox=True, shadow=True)
+        legend_elements = list()
+
+        for i in range(len(color)):
+            legend_elements.append(Line2D([0], [0], color=color[i], lw=2, label=f'$\it{self.prop[i][0:4]}$'))
+        ax.legend(handles=legend_elements, loc='lower left',  fancybox=True, shadow=True,ncol=3)
         plt.grid()
         cbar_ax = fig.add_axes([0.15, 0.8, 0.2, 0.03])
         cbar = fig.colorbar(sc, cax=cbar_ax, orientation='horizontal')
-        cbar.ax.set_xticks([0.9, 1])
+        cbar.ax.set_xticks([similarities[0].quantile(0.15), similarities[0].quantile(0.85)])
         cbar.ax.set_yticks([])
         cbar.ax.set_xticklabels(['far', 'near'])
         plt.savefig(save_path, format='svg')

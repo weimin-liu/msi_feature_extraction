@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt, gridspec
 from sklearn.decomposition import NMF
 import numpy as np
 import tqdm
+from scipy.stats.stats import pearsonr
 
 
 def predict_H(H):
@@ -90,10 +91,31 @@ def cal_featureScore_kim(W):
     return s_list
 
 
+def accum_WH(W_accum, H_accum, W, H, accum_time, tol=0.9):
+
+    corr = np.zeros([W_accum.shape[1],W.shape[1]])
+    for m, n in itertools.product(range(W_accum.shape[1]),range(W.shape[1])):
+        r, _ = pearsonr(W_accum[:, m], W[:, n])
+        corr[m, n] = r
+    for i in range(W.shape[1]):
+        j = np.argmax(corr[:, i])
+        if corr[j, i] >= tol:
+            accum_time[j] = accum_time[j] + 1
+            W_accum[:, j] = W_accum[:, j] + W[:, i]
+            H_accum[j, :] = H_accum[j, :] + H[i, :]
+        else:
+            accum_time.append(0)
+            W_accum = np.c_[W_accum, W[:, i]]
+            H_accum = np.c_[H_accum.T, H.T[:, i]].T
+
+    return W_accum, H_accum, accum_time
+
+
 def repeated_nmf(V, rank, n_run, *args, **kwargs):
     """
 
     Args:
+        n_run:
         W:
         rank:
         n:
@@ -102,8 +124,14 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     """
     out_list = []
-
+    accum_time = list()
+    for i in range(rank):
+        accum_time.append(0)
     consensus = np.zeros((V.shape[1], V.shape[1]))
+
+    W_accum = 0
+
+    H_accum = 0
 
     for i in tqdm.tqdm(range(n_run)):
         model = NMF(n_components=rank, random_state=i, *args, **kwargs)
@@ -111,6 +139,15 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
         W = model.fit_transform(V)
 
         H = model.components_
+
+        if isinstance(W_accum, int):
+            W_accum = W
+            H_accum = H
+        elif isinstance(W_accum, np.ndarray):
+            W_accum, H_accum, accum_time = accum_WH(W_accum, H_accum, W, H, accum_time)
+
+        else:
+            raise NotImplementedError
 
         consensus += cal_conectivity(H, predict_H(H)[0])
 
@@ -150,7 +187,13 @@ def repeated_nmf(V, rank, n_run, *args, **kwargs):
 
     mean_out.append(consensus)
 
-    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus']
+    mean_out.append(W_accum)
+
+    mean_out.append(H_accum)
+
+    mean_out.append(accum_time)
+
+    result_name = ['sparseH', 'sparseW', 'rss', 'mse', 'evar', 'cophcor', 'disp', 'fsW', 'consensus','W_accum','H_accum','accum_time']
 
     summary = {
         'rank': rank
@@ -170,7 +213,6 @@ def clean_axis(ax):
 
 
 def save_consensus(C, prefix):
-
     r_C = 1 - C
 
     fig = plt.figure(figsize=(13.9, 10))
