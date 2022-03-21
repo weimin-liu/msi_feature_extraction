@@ -1,9 +1,9 @@
-KDEpy~=1.0.2
-matplotlib~=3.5.1
-numpy~=1.22.1
-pandas~=1.4.0
-scikit-learn~=1.0.2
-scipy~=1.7.3
+KDEpy
+matplotlib
+numpy
+pandas
+scikit-learn
+scipy
 setuptools
-tqdm~=4.62.3
-scikit-image~=0.19.1
+tqdm
+scikit-image

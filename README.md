@@ -1,13 +1,13 @@
-# MSI Feature Extraction
+# SediMine
 
-Clean mass spectrometry imaging dataset and extract geologically meaningful features
+A data cleaning and datamining workflow for sedimentary MSI data sets.
 
 ## Prerequisite
 Before using the workflow, proprietary mass spectrometry data format (e.g., .D from Bruker) needs to be exported as plain text file (represented as `da_exported_txt` in the following examples). Only the coordinates and the centroid mass-to-charge ratios along with the peak intensity are needed from each spectrum.
 
 Python >= 3.5 is needed, and the required library is listed in requirements.txt.
 
-The package has been tested on both Windows (Windows 10), OSX, and Linux (Archlinux).
+The package has been tested on Windows (Windows 10), OSX, and Linux (Archlinux).
 
 ## Installation
 Just run the following command and the package with all dependecies will be installed.
@@ -18,7 +18,7 @@ pip install git+https://github.com/weimin-liu/msi_feature_extraction.git
 
 ## Instruction
 ### Mass calibration
-Dataset should be calibrated first if it hasn't been calibrated yet. Currently, only a slightly modified version of single-point lock mass calibration is available in this package.
+Dataset should be calibrated first if it hasn't been calibrated yet. Currently, a quadric mass error calibration function is available in this package.
 
 ````python
 from mfe.calibration import suggest_calibrates, SimpleFallbackCalibrate
