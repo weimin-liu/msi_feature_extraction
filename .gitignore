@@ -133,3 +133,4 @@ dmypy.json
 examples/
 .idea/
 /examples/SBB5-10cm_mz520-580_feature_table_wo_peak_picking.csv
+scripts/data
