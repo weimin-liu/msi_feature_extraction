@@ -181,8 +181,10 @@ class GLCMPeakRanking:
         scaley = 1.0 / (ys.max() - ys.min())
         sc = ax.scatter(xs * scalex, ys * scaley, alpha=0.5, c=similarities[0], vmin=similarities[0].quantile(0.15), vmax=similarities[0].quantile(0.85),cmap='jet')
 
-        ax.set_xlabel(f'PC1 ({round(100 * pca.explained_variance_ratio_[0], 2)}%)')
-        ax.set_ylabel(f'PC2 ({round(100 * pca.explained_variance_ratio_[1], 2)}%)')
+        pc1_str = round(100 * pca.explained_variance_ratio_[0], 2)
+        pc2_str = round(100 * pca.explained_variance_ratio_[1], 2)
+        ax.set_xlabel(f'PC1 ({pc1_str:.2f}%)')
+        ax.set_ylabel(f'PC2 ({pc2_str:.2f}%)')
         ax.set_xticks([-1, 0, 1])
         ax.set_yticks([-1, 0, 1])
         ax.set_xlim(-1, 1)
