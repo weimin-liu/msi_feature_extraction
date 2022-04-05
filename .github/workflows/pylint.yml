@@ -14,12 +14,6 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Automatic requirements.txt for Python Projects
-      uses: ryan-rozario/pipreqs-action@v2.0.0
-      with:
-        PROJECT_PATH: src/
-        REQUIREMENT_PATH: requirements.txt
-        PROJECT_NAME: mfe
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
