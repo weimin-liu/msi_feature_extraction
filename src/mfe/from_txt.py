@@ -581,7 +581,7 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
             elif peak_picking_method == 'prominence':
                 peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
             else:
-                raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
+                raise NotImplementedError("The peak picking method chosen hasn't been implemented yet!")
 
             ref_peaks[peak_th].extend([round(x[i], 4) for i in peaks])
 
@@ -592,7 +592,7 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
                 elif peak_picking_method == 'prominence':
                     peaks, _ = signal.find_peaks(y, prominence=(th, None))
                 else:
-                    raise NotImplemented("The peak picking method chosen hasn't been implemented yet!")
+                    raise NotImplementedError("The peak picking method chosen hasn't been implemented yet!")
 
                 ref_peaks[th].extend([round(x[i], 4) for i in peaks])
         else:
