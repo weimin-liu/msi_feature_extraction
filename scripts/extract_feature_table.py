@@ -1,7 +1,7 @@
 import pickle
 
 import numpy as np
-from mfe.from_txt import msi_from_txt, get_ref_peaks, create_feature_table
+from src.mfe.from_txt import msi_from_txt, get_ref_peaks, create_feature_table
 from argparse import ArgumentParser
 
 def main(argv):
