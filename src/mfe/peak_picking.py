@@ -9,7 +9,7 @@ from scipy import interpolate
 from skimage.feature import graycomatrix, graycoprops
 from scipy.interpolate import interpolate
 from skimage.exposure import exposure
-import cv2
+from cv2 import cv2
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
