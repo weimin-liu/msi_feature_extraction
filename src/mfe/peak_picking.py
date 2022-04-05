@@ -405,22 +405,23 @@ def image_interpolation(
         interp_image = cv2.filter2D(image, -1, kernel)
 
     else:
-        h, w = image.shape[:2]
-        xx, yy = np.meshgrid(np.arange(w), np.arange(h))
+        return NotImplementedError
+#         h, w = image.shape[:2]
+#         xx, yy = np.meshgrid(np.arange(w), np.arange(h))
 
-        image = np.ma.masked_invalid(image)
+#         image = np.ma.masked_invalid(image)
 
-        known_x = xx[~image.mask]
-        known_y = yy[~image.mask]
-        known_v = image[~image.mask]
-        missing_x = xx[image.mask]
-        missing_y = yy[image.mask]
+#         known_x = xx[~image.mask]
+#         known_y = yy[~image.mask]
+#         known_v = image[~image.mask]
+#         missing_x = xx[image.mask]
+#         missing_y = yy[image.mask]
 
-        interp_values = interpolate.griddata(
-            (known_x, known_y), known_v, (missing_x, missing_y),
-            method=method, fill_value=fill_value
-        )
+#         interp_values = interpolate.griddata(
+#             (known_x, known_y), known_v, (missing_x, missing_y),
+#             method=method, fill_value=fill_value
+#         )
 
-        interp_image = image.copy()
-        interp_image[missing_y, missing_x] = interp_values
+#         interp_image = image.copy()
+#         interp_image[missing_y, missing_x] = interp_values
     return interp_image
