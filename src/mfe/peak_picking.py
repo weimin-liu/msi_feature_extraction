@@ -377,7 +377,7 @@ def de_flatten(coordinates: np.ndarray,
 
 
 def image_interpolation(
-        image: np.ndarray,
+        image,
         method='blur',
         blur_filter=(2, 2),
         fill_value=0
