@@ -7,3 +7,4 @@ scikit-learn
 scipy
 scikit-image
 tqdm
+opencv
