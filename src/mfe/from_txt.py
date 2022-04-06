@@ -2,18 +2,16 @@ import concurrent.futures
 import math
 import re
 import typing
+from bisect import bisect
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
 
-import tqdm
 import numpy as np
 import pandas as pd
-from bisect import bisect
-
+import tqdm
 from KDEpy import FFTKDE
 from matplotlib import pyplot as plt
 from scipy import signal
-
 from scipy.sparse import csr_matrix, vstack
 
 # precision of mass-to-charge ratio to use before binning
@@ -22,8 +20,9 @@ MZ_PRECISION = 4
 
 def parse_da_export(line: str, str_x=None, str_y=None):
     """
-    parse lines in the plain text file exported from Bruker Data Analysis. Format of the plain text file is as follows:
-    each line corresponds to one spot on the slide, with its x,y coordinate and the spectrum.
+    parse lines in the plain text file exported from Bruker Data Analysis. Format of the plain
+    text file is as follows: each line corresponds to one spot on the slide, with its x,
+    y coordinate and the spectrum.
 
     Parameters:
     --------
@@ -68,8 +67,8 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
 def msi_from_txt(raw_txt_path: str) -> dict:
     """
-    convert the plain text file exported from Bruker DataAnalysis to a dictionary object, with x,y as the key and
-    spectrum as the value
+    convert the plain text file exported from Bruker DataAnalysis to a dictionary object, with x,
+    y as the key and spectrum as the value
 
     Parameters:
     --------
@@ -100,7 +99,7 @@ def msi_from_txt(raw_txt_path: str) -> dict:
 
         done_iter = tqdm.tqdm(done_iter, total=len(lines))
 
-        results = dict()
+        results = {}
 
         for future in done_iter:
             res = future.result()
@@ -112,7 +111,8 @@ def msi_from_txt(raw_txt_path: str) -> dict:
 
 class Spectrum:
     """
-    modified from https://raw.githubusercontent.com/francisbrochu/msvlm/master/msvlm/msspectrum/spectrum.py
+    modified from https://raw.githubusercontent.com/francisbrochu/msvlm/master/msvlm/msspectrum
+    /spectrum.py
     """
 
     params = {'backend': 'pdf',
@@ -145,7 +145,8 @@ class Spectrum:
         self._mz_precision = mz_precision  # in decimals e.g.: mz_precision=3 => 5.342
 
         if len(mz_values) != len(intensity_values):
-            raise ValueError("The number of mz values must be equal to the number of intensity values.")
+            raise ValueError("The number of mz values must be equal to the number of intensity "
+                             "values.")
 
         self.set_peaks(mz_values, intensity_values)
 
@@ -164,11 +165,8 @@ class Spectrum:
         return self._mz_err
 
     @property
-    def n_intensity_values(self, method='median'):
-        if method == 'median':
-            return self._median_normalized_peaks_intensity
-        else:
-            raise NotImplementedError
+    def n_intensity_values(self):
+        return self._median_normalized_peaks_intensity
 
     @property
     def mz_precision(self):
@@ -199,12 +197,14 @@ class Spectrum:
         mz_bin = tol * mz * (10 ** -6)
         mz_min = mz - mz_bin
         mz_max = mz + mz_bin
-        mz_value_arr = self.mz_values[np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
+        mz_value_arr = self.mz_values[
+            np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
         if len(mz_value_arr) == 0:
             mz_value = None
             intensity_value = None
         else:
-            intensity_arr = self.intensity_values[np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
+            intensity_arr = self.intensity_values[
+                np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
             intensity_value = np.max(intensity_arr)
             mz_value = mz_value_arr[np.argmax(intensity_arr)]
         return mz_value, intensity_value
@@ -213,13 +213,14 @@ class Spectrum:
         mz_bin = tol * mz * (10 ** -6)
         mz_min = mz - mz_bin
         mz_max = mz + mz_bin
-        intensity_arr = self.intensity_values[np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
+        intensity_arr = self.intensity_values[
+            np.where((self.mz_values >= mz_min) & (self.mz_values <= mz_max))]
         intensity = sum(intensity_arr)
         return intensity
 
     def set_peaks(self, mz_values, intensity_values):
-        # XXX: This function must create a copy of mz_values and intensity_values to prevent the modification of
-        # referenced arrays. This is assumed by other functions. Be careful!
+        # This function must create a copy of mz_values and intensity_values to prevent the
+        # modification of referenced arrays. This is assumed by other functions. Be careful!
 
         # Sort the peaks by mz
         sort_mz = np.argsort(mz_values)
@@ -229,7 +230,8 @@ class Spectrum:
         # Round the mz values based on the mz precision
         mz_values = np.asarray(np.round(mz_values, self._mz_precision), dtype=np.float)
 
-        # Contiguous mz values might now be equivalent. Combine their intensity values by taking the sum.
+        # Contiguous mz values might now be equivalent. Combine their intensity values by taking
+        # the sum.
         unique_mz = np.unique(mz_values)
         unique_mz_intensities = np.zeros(unique_mz.shape)
 
@@ -251,9 +253,11 @@ class Spectrum:
 
         self._peaks_mz = unique_mz
         self._peaks_intensity = unique_mz_intensities
-        self._median_normalized_peaks_intensity = self._peaks_intensity / np.median(self._peaks_intensity)
-        self._peaks = dict([(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
-                            range(len(self._peaks_mz))])
+        self._median_normalized_peaks_intensity = self._peaks_intensity / np.median(
+            self._peaks_intensity)
+        self._peaks = {
+            [(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
+             range(len(self._peaks_mz))]}
 
         self._check_peaks_integrity()
 
@@ -282,8 +286,11 @@ class Spectrum:
         mz_values = spec.mz_values[np.where((spec.mz_values >= start) & (spec.mz_values <= end))]
         intensity_values = spec.intensity_values[
             np.where((spec.mz_values >= start) & (spec.mz_values <= end))]
-        if not inplace:
-            tmp = Spectrum(mz_values, intensity_values, mz_precision=spec.mz_precision, metadata=spec.metadata)
+        if inplace:
+            spec.set_peaks(mz_values, intensity_values)
+        else:
+            tmp = Spectrum(mz_values, intensity_values, mz_precision=spec.mz_precision,
+                           metadata=spec.metadata)
             for key in spec.__dict__.keys():
                 type_ = type(spec.__getattribute__(key)).__name__
                 if type_ not in ['ndarray', 'list']:
@@ -291,15 +298,14 @@ class Spectrum:
                 else:
                     pass
             return tmp
-        else:
-            spec.set_peaks(mz_values, intensity_values)
 
     def show(self):
         fig, ax = plt.subplots()
         for i in range(len(self)):
             ax.plot([self.mz_values[i], self.mz_values[i]],
                     [0, 100 * self.intensity_values[i] / np.max(self.
-                                                                intensity_values)], linewidth=0.3, color='black')
+                                                                intensity_values)], linewidth=0.3,
+                    color='black')
         interval = (np.max(self.mz_values) - np.min(self.mz_values)) / 30
         min_mz = max(0, math.floor(self.mz_values[0] / interval - 1) * interval)
         max_mz = max(0, math.floor(self.mz_values[-1] / interval + 1) * interval)
@@ -324,8 +330,10 @@ class Spectrum:
 
     def _check_peaks_integrity(self):
         if not len(self._peaks_mz) == len(self._peaks_intensity):
-            raise ValueError("The number of mz values must be equal to the number of intensity values.")
-        if not all(self._peaks_mz[i] <= self._peaks_mz[i + 1] for i in range(len(self._peaks_mz) - 1)):
+            raise ValueError(
+                "The number of mz values must be equal to the number of intensity values.")
+        if not all(
+                self._peaks_mz[i] <= self._peaks_mz[i + 1] for i in range(len(self._peaks_mz) - 1)):
             raise ValueError("Mz values must be sorted.")
         if len(np.unique(self._peaks_mz)) != len(self._peaks_mz):
             raise ValueError("Mz value list contains duplicate values.")
@@ -349,7 +357,8 @@ def combine_spectrum(spot: list, spectrum: Spectrum, primer_df: pd.DataFrame, no
 
         csr_matrix(df.to_numpy().flatten()): a sparse matrix with binned mass spectrum
 
-        csr_matrix(err_df.to_numpy().flatten()): a sparse matrix with the mass error before and after peak alignment
+        csr_matrix(err_df.to_numpy().flatten()): a sparse matrix with the mass error before and
+        after peak alignment
 
     """
     if normalization == 'None':
@@ -419,7 +428,8 @@ def create_bin(spot, spectrum: Spectrum, ref_peaks, tol=10):
             new_peaks[new_mz] = max(spectrum.intensity_at(mz), new_peaks[new_mz])
             mz_err[new_mz] = err * 1e6
 
-    spectrum_bin = Spectrum(list(new_peaks.keys()), list(new_peaks.values()), metadata=spectrum.metadata)
+    spectrum_bin = Spectrum(list(new_peaks.keys()), list(new_peaks.values()),
+                            metadata=spectrum.metadata)
 
     mz_err = OrderedDict(sorted(mz_err.items()))
 
@@ -428,8 +438,9 @@ def create_bin(spot, spectrum: Spectrum, ref_peaks, tol=10):
     return spot, spectrum_bin
 
 
-def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='None') -> typing.Tuple[
-    pd.DataFrame, pd.DataFrame]:
+def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='None') -> \
+        typing.Tuple[
+            pd.DataFrame, pd.DataFrame]:
     """
     create binned feature table with designated bin size
     Parameters:
@@ -449,13 +460,13 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
     """
 
     def mp_wrapper(func, source_dict, *args, **kwargs):
-        to_do = list()
+        to_do = []
         for key in source_dict:
             future = executor.submit(func, key, source_dict[key], *args, **kwargs)
             to_do.append(future)
         done_iter = concurrent.futures.as_completed(to_do)
         done_iter = tqdm.tqdm(done_iter, total=len(to_do))
-        target_dict = dict()
+        target_dict = {}
         for future in done_iter:
             res = future.result()
             target_dict[res[0]] = res
@@ -475,11 +486,13 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
 
         primer_df = primer_df.replace(0, np.nan)
 
-        combined_spectrum_dict = mp_wrapper(combine_spectrum, bin_spectrum_dict, primer_df, normalization=normalization)
+        combined_spectrum_dict = mp_wrapper(combine_spectrum, bin_spectrum_dict, primer_df,
+                                            normalization=normalization)
 
         err_dict = {key: combined_spectrum_dict[key][2] for key in combined_spectrum_dict.keys()}
 
-        combined_spectrum_dict = {key: combined_spectrum_dict[key][1] for key in combined_spectrum_dict.keys()}
+        combined_spectrum_dict = {key: combined_spectrum_dict[key][1] for key in
+                                  combined_spectrum_dict.keys()}
 
     spot = list(combined_spectrum_dict.keys())
 
@@ -508,9 +521,21 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
     return feature_table, err_table
 
 
+def find_peaks(y, peak_picking_method=None, peak_th=None):
+    if peak_picking_method == 'height':
+        peaks, _ = signal.find_peaks(y, height=peak_th)
+    elif peak_picking_method == 'prominence':
+        peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
+    else:
+        raise NotImplementedError(
+            "The peak picking method chosen hasn't been implemented yet!")
+    return peaks
+
+
 def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th=0.1):
     """
-    walk through all spectrum and find reference peaks for peak bining using Kernel Density Estimation
+    walk through all spectrum and find reference peaks for peak bining using Kernel Density
+    Estimation
 
     Parameters:
     --------
@@ -519,10 +544,12 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
         peak_picking_method: 'prominence' or 'height', used in function scipy.signal.find_peaks.
 
         peak_th: the threshold for distinguishing between peaks and noises, used in the function
-        scipy.signal.find_peaks. The value should be between [0, 1), the higher the value, more peaks will be picked
-        here. if the peak_picking_method is set to 'height', then scipy.signal.find_peaks(, height=peak_th),
-        if is set to 'prominence', then scipy.signal.find_peaks(, prominence=(peak_th, None]). Read
-        https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html for more reference.
+        scipy.signal.find_peaks. The value should be between [0, 1), the higher the value,
+        more peaks will be picked here. if the peak_picking_method is set to 'height',
+        then scipy.signal.find_peaks(, height=peak_th), if is set to 'prominence',
+        then scipy.signal.find_peaks(, prominence=(peak_th, None]). Read
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html for
+        more reference.
 
     Returns:
     --------
@@ -530,13 +557,13 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
     """
 
     # get all mzs from the sample and sort them
-    mzs_all = [spec._peaks_mz for spec in spectrum_dict.values()]
+    mzs_all = [spec.mz_values for spec in spectrum_dict.values()]
 
     mzs_all = np.concatenate(mzs_all).ravel()
 
     mzs_all = np.sort(mzs_all)
 
-    cluster = list()
+    cluster = []
 
     min_mz, max_mz = np.min(mzs_all), np.max(mzs_all)
 
@@ -554,66 +581,52 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
 
         cluster.append(mzs_all[left:right])
 
-    ref_peaks = dict()
+    ref_peaks = {}
 
     if isinstance(peak_th, float):
 
-        ref_peaks[peak_th] = list()
+        ref_peaks[peak_th] = []
 
     elif isinstance(peak_th, list):
 
         for th in peak_th:
-
-            ref_peaks[th] = list()
+            ref_peaks[th] = []
 
     for c in cluster:
 
         x, y = FFTKDE(kernel='gaussian', bw='ISJ').fit(c).evaluate()
 
-        # TODO: add smoothing before peak detection
         y = (y - np.min(y)) / (np.max(y) - np.min(y))
 
         if isinstance(peak_th, float):
-            peak_th = peak_th
-
-            if peak_picking_method == 'height':
-                peaks, _ = signal.find_peaks(y, height=peak_th)
-            elif peak_picking_method == 'prominence':
-                peaks, _ = signal.find_peaks(y, prominence=(peak_th, None))
-            else:
-                raise NotImplementedError("The peak picking method chosen hasn't been implemented yet!")
-
+            peaks = find_peaks(y, peak_picking_method=peak_picking_method, peak_th=peak_th)
             ref_peaks[peak_th].extend([round(x[i], 4) for i in peaks])
 
         elif isinstance(peak_th, list):
             for th in peak_th:
-                if peak_picking_method == 'height':
-                    peaks, _ = signal.find_peaks(y, height=th)
-                elif peak_picking_method == 'prominence':
-                    peaks, _ = signal.find_peaks(y, prominence=(th, None))
-                else:
-                    raise NotImplementedError("The peak picking method chosen hasn't been implemented yet!")
-
+                peaks = find_peaks(y, peak_picking_method=peak_picking_method, peak_th=th)
                 ref_peaks[th].extend([round(x[i], 4) for i in peaks])
         else:
             raise NotImplementedError
 
-    for key in ref_peaks:
+    for key in list(ref_peaks.keys()):
         ref_peaks[key] = np.sort(ref_peaks[key])
 
     return ref_peaks
 
 
-def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method='prominence') -> dict:
+def search_peak_th(raw_data: dict, peak_th_candidates,
+                   peak_picking_method='prominence') -> dict:
     """
-    This toolbox function can be used to decide which peak_th parameter should be used to get reference peaks. It
-    will return four metrics for consideration:
+    This toolbox function can be used to decide which peak_th parameter should be used to get
+    reference peaks. It will return four metrics for consideration:
 
     - Number of reference peaks: the number of reference peaks discovered
 
     - TIC Coverage: how many percentage of the peak intensity is covered after peak alignment
 
-    - Accuracy: the overall m/z error between the measured peaks and the reference peak, including mean and std
+    - Accuracy: the overall m/z error between the measured peaks and the reference peak,
+    including mean and std
 
     - Sparsity: how sparse is the feature table that is obtained from the reference peaks
 
@@ -628,15 +641,14 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
     """
 
-    # TODO: add sanity check before processing
+    cover = []
 
-    cover = list()
+    me = []
 
-    me = list()
+    spar = []
 
-    spar = list()
-
-    ref = get_ref_peaks(raw_data, peak_picking_method=peak_picking_method, peak_th=peak_th_candidates)
+    ref = get_ref_peaks(raw_data, peak_picking_method=peak_picking_method,
+                        peak_th=peak_th_candidates)
 
     n_ref = [len(ref[key]) for key in ref]
 
@@ -644,13 +656,12 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
     feature_table, err_table = create_feature_table(raw_data, ref[min_pth])
 
-    for key in ref:
-
-        feature_table_sub = feature_table[ref[key]]
+    for item in ref.items():
+        feature_table_sub = feature_table[item]
 
         feature_table_sub[['x', 'y']] = feature_table[['x', 'y']]
 
-        err_table_sub = err_table[ref[key]]
+        err_table_sub = err_table[item]
 
         err_table_sub[['x', 'y']] = err_table[['x', 'y']]
 
@@ -672,9 +683,10 @@ def search_peak_th(raw_data: dict, peak_th_candidates: list, peak_picking_method
 
 def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) -> pd.DataFrame:
     """
-    Use this function to evaluate the performance of peak alignment. It has two metrics, the first is the coverage of
-    the intensity of the aligned peaks, the second is the accuracy, which measures the discrepancy of the reference
-    peaks comparing to the measured peaks before alignment.
+    Use this function to evaluate the performance of peak alignment. It has two metrics,
+    the first is the coverage of the intensity of the aligned peaks, the second is the accuracy,
+    which measures the discrepancy of the reference peaks comparing to the measured peaks before
+    alignment.
 
     Args:
         spectrum_dict: the dictionary representing raw data
@@ -689,42 +701,42 @@ def peak_alignment_evaluation(spectrum_dict: dict, feature_table: pd.DataFrame) 
 
     if len(spectrum_dict) != len(feature_table):
         raise ValueError("This feature table is not derived from the current raw data!")
-    else:
 
-        feature = feature_table
-        feature = feature.set_index(['x', 'y'])
+    feature = feature_table
+    feature = feature.set_index(['x', 'y'])
 
-        keys = list(spectrum_dict.keys())
+    keys = list(spectrum_dict.keys())
 
-        keys_df = pd.DataFrame(keys)
+    keys_df = pd.DataFrame(keys)
 
-        keys_df = keys_df.set_index([0, 1])
+    keys_df = keys_df.set_index([0, 1])
 
-        feature = feature.loc[keys_df.index, :]
+    feature = feature.loc[keys_df.index, :]
 
-        feature = np.array(feature)
+    feature = np.array(feature)
 
-        tic_after = np.sum(feature, axis=1)
+    tic_after = np.sum(feature, axis=1)
 
-        coverage_dict = {}
+    coverage_dict = {}
 
-        for m in range(len(spectrum_dict)):
+    for m in range(len(spectrum_dict)):
 
-            key = list(spectrum_dict.keys())[m]
+        key = list(spectrum_dict.keys())[m]
 
-            coverage_dict[key] = tic_after[m] / spectrum_dict[key].tic
+        coverage_dict[key] = tic_after[m] / spectrum_dict[key].tic
 
-            if coverage_dict[key] > 1:
-                raise ValueError('Something went wrong! TIC after alignment should not be greater than before!')
+        if coverage_dict[key] > 1:
+            raise ValueError(
+                'Something went wrong! TIC after alignment should not be greater than before!')
 
-        coverage = pd.DataFrame([coverage_dict]).T
+    coverage = pd.DataFrame([coverage_dict]).T
 
-        tmp = pd.DataFrame(list(coverage.index))
+    tmp = pd.DataFrame(list(coverage.index))
 
-        coverage = coverage.reset_index()
+    coverage = coverage.reset_index()
 
-        coverage[['x', 'y']] = tmp
+    coverage[['x', 'y']] = tmp
 
-        coverage = coverage[['x', 'y', 0]].rename(columns={0: 'TIC_coverage'})
+    coverage = coverage[['x', 'y', 0]].rename(columns={0: 'TIC_coverage'})
 
     return coverage
