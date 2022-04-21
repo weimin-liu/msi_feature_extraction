@@ -1,3 +1,6 @@
+"""
+this module includes all the functions related to time
+"""
 import time
 from datetime import datetime as dt
 
@@ -21,17 +24,15 @@ def from_year_fraction(date: float):
     --------
         the corresponding datetime object
     """
-    if type(date).__name__ == 'float':
-        s = since_epoch
-        year = int(date)
-        fraction = date - year
-        start_of_this_year = dt(year=year, month=1, day=1)
-        start_of_next_year = dt(year=year + 1, month=1, day=1)
-        year_duration = s(start_of_next_year) - s(start_of_this_year)
-        year_elapsed = fraction * year_duration
-        return dt.fromtimestamp(year_elapsed + s(start_of_this_year))
-    else:
-        raise TypeError
+    if type(date).__name__ != 'float':
+        raise TypeError('date must be a float')
+    year = int(date)
+    fraction = date - year
+    start_of_this_year = dt(year=year, month=1, day=1)
+    start_of_next_year = dt(year=year + 1, month=1, day=1)
+    year_duration = since_epoch(start_of_next_year) - since_epoch(start_of_this_year)
+    year_elapsed = fraction * year_duration
+    return dt.fromtimestamp(year_elapsed + since_epoch(start_of_this_year))
 
 
 def to_year_fraction(date):
@@ -46,11 +47,10 @@ def to_year_fraction(date):
     --------
         the corresponding float of the datetime object
     """
-    s = since_epoch
     year = date.year
     start_of_this_year = dt(year=year, month=1, day=1)
     start_of_next_year = dt(year=year + 1, month=1, day=1)
-    year_elapsed = s(date) - s(start_of_this_year)
-    year_duration = s(start_of_next_year) - s(start_of_this_year)
+    year_elapsed = since_epoch(date) - since_epoch(start_of_this_year)
+    year_duration = since_epoch(start_of_next_year) - since_epoch(start_of_this_year)
     fraction = year_elapsed / year_duration
     return date.year + fraction
