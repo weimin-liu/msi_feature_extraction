@@ -402,7 +402,7 @@ def image_interpolation(
 
         kernel = np.ones((blur_filter[0], (blur_filter[1])), np.float32) / (
                 blur_filter[0] * blur_filter[1])
-        # pylint: disable=c-extension-no-member
+        # pylint: disable=no-member
         interp_image = cv2.filter2D(image, -1, kernel)
 
     else:
