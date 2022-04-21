@@ -1,4 +1,4 @@
-# SediMine
+# Mfe
 
 A data cleaning and datamining workflow for sedimentary MSI data sets.
 
