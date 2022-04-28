@@ -1,90 +1,80 @@
-# Mfe
+# mfe
 
-A data cleaning and datamining workflow for sedimentary MSI data sets.
+Yet another automated mass spectrometry imaging data processing package, but for **geological samples**. 
 
 ## Prerequisite
+
 Before using the workflow, proprietary mass spectrometry data format (e.g., .D from Bruker) needs to be exported as plain text file (represented as `da_exported_txt` in the following examples). Only the coordinates and the centroid mass-to-charge ratios along with the peak intensity are needed from each spectrum.
 
 Python >= 3.5 is needed, and the required library is listed in requirements.txt.
 
-The package has been tested on Windows (Windows 10), OSX, and Linux (Archlinux).
+This package is OS-independent
 
 ## Installation
+
 Just run the following command and the package with all dependecies will be installed.
 
 ````bash
-pip install git+https://github.com/weimin-liu/msi_feature_extraction.git
+pip install mfe
 ````
 
 ## Instruction
+
 ### Mass calibration
-Dataset should be calibrated first if it hasn't been calibrated yet. Currently, a quadric mass error calibration function is available in this package.
+
+Dataset should be calibrated first if it hasn't been calibrated yet. Currently, a quadratic mass error calibration function (`mfe.quadratic_calibration`) is available in this package. Just provide the list of calibrants, and a quadratic function will be fitted to calibrate the spectrum. 
+
+### Bin-wise KDE for reference peak detection and peak alignment
+
+Reference peaks that are used for spectra alignment are detected in the evenly spaced discrete mass bins, with a peak picking threshold value `pth`. 
+
+The following is an example of how to create a feature table from the MSI spectra with ion intensities normalized by the median peak intensity of each individual spectrum.
 
 ````python
-from mfe.calibration import suggest_calibrates, SimpleFallbackCalibrate
-from mfe.from_txt import msi_from_txt
+from mfe.from_txt import msi_from_txt, get_ref_peaks, create_feature_table
 
-# get a list of the most abundant peaks in the dataset
+spectra = msi_from_txt(da_exported_txt)
 
-candidates, _ = suggest_calibrates(da_exported_txt)
+ref = get_ref_peaks(spectra1, peak_th=pth)
 
-# create a dictionary to store the dataset
-msi = msi_from_txt(da_exported_txt)
-
-sfc = SimpleFallbackCalibrate()
-
-# feed the list of calibrates to SimpleFallbackCalibrate. Assign each spectrum with a calibrate. The calibrate is decided as follows: first try to use the first calibrate in the list in all spectra, if the calibrate is missing in some spectra, it will then try to calibrate those spectra with the second calibrate in the list, and so on, until the spectra are all calibrated or the calibrate list is exhausted.
-sfc.fit(msi, candidates)
-
-# do the actual calibration on the dataset
-msi_calibrated = sfc.transform(msi)
+feature_table = create_feature_table(spectra, ref, normalization='median')
 ````
 
-### Align peaks into discrete mass bins
+A 2D table will be produced in this step, with columns being the name of the reference peaks (*m/z* ratios), and each row representing one laser spot.
 
-Currently, the discrete mass bins are evenly spaced with user designated interval.
-
-````python
-from mfe.from_txt import create_feature_table
-
-feature_table = create_feature_table(msi_calibrated)
-````
-
-A 2D table will be produced in this step, with columns being the name of mass bins (m/z ratios), and each row representing one spot.
-
-### Pick peaks using grey-level co-occurrences matrix
+### Pick peaks using grey-level co-occurrences matrix (optional)
 No peak has been dropped until this step, grey-level co-occurrences matrix (GLCM) are used to detect how structured are those ion images and rank them.
 
-````python
-from mfe.peak_picking import get_peak_ranks
-
-t_df, deflated_arr = get_peak_ranks(feature_table)
-````
-The result contains the ranked peaks with its corresponding ion image, manual examination is needed to decide a threshold (`th`) above which the peaks are preserved.
+The following is an example of comparing the GLCM features in MSI dataset with those in the X-radiophotograph.
 
 ````python
-from mfe.peak_picking import sel_peak_by_rank
+from mfe.peak_picking import GLCMPeakRanking
 
-feature_table, ims = sel_peak_by_rank(t_df, deflated_arr, feature_table, th)
+glcm = GLCMPeakRanking(q=8)
+glcm.fit(feature_table, [1, 2, 3, 4, 5], [np.pi / 6, 0, -np.pi / 6, np.pi / 2, -np.pi / 2, np.pi / 4, -np.pi / 4])
+
+results = glcm.results
+results = pd.DataFrame(results)
+
 ````
+
 ### Feature extraction using non-negative matrix factorization
 
 ````python
-from mfe.feature import rank_estimate, nmf
+from mfe.feature import repeated_nmf
 
 # first detect the appropriate rank for the data, the list of images are used here instead of the feature table, because the images have already been normalized with quantiles removed.
+
 rank_candidates = list(range(2, 20))
 
-rank_estimate(rank_candidates, ims)
+summary = repeated_nmf(ims, rank_candidates, 30, init='random', max_iter=3000)
 
-# then do the factorization with an appropriate rank `rk`, getting the basis matrix and the coeffcients
-basis, components = nmf(ims, feature_table, rk)
-
-# to get the co-localization molecular network, n_run >1 must be set
-basis, components, G = nmf(ims, feature_table, rk, n_run=20)
 ````
 
-## Notes:
+## TODO:
+
+- [ ] Add a more sophisticated piecewise function for mass calibration
+- [ ] Add an image registration function (Affine transformation already existed in the code)
 
 
 ## Credits
