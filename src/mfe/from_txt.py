@@ -315,9 +315,8 @@ class Spectrum:
         self._peaks_intensity = unique_mz_intensities
         self._median_normalized_peaks_intensity = self._peaks_intensity / np.median(
             self._peaks_intensity)
-        self._peaks = {
-            [(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
-             range(len(self._peaks_mz))]}
+        self._peaks = dict([(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
+             range(len(self._peaks_mz))])
 
         self._check_peaks_integrity()
 
