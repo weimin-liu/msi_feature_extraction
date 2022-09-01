@@ -315,9 +315,8 @@ class Spectrum:
         self._peaks_intensity = unique_mz_intensities
         self._median_normalized_peaks_intensity = self._peaks_intensity / np.median(
             self._peaks_intensity)
-        self._peaks = {
-            [(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
-             range(len(self._peaks_mz))]}
+        self._peaks = dict([(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
+             range(len(self._peaks_mz))])
 
         self._check_peaks_integrity()
 
@@ -653,7 +652,7 @@ def find_peaks_in_bin(peak_th=None, ref_peaks=None, c_dist=None, peak_picking_me
     return ref_peaks
 
 
-def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th=0.1):
+def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence', peak_th=0.1):
     """
     walk through all spectrum and find reference peaks for peak bining using Kernel Density
     Estimation
@@ -676,9 +675,13 @@ def get_ref_peaks(spectrum_dict: dict, peak_picking_method='prominence', peak_th
     --------
 
     """
-
+    mzs_all = []
     # get all mzs from the sample and sort them
-    mzs_all = [spec.mz_values for spec in spectrum_dict.values()]
+    if isinstance(spectrum_dict, dict):
+        mzs_all = [spec.mz_values for spec in spectrum_dict.values()]
+    elif isinstance(spectrum_dict, list):
+        for spectrum_dict_item in spectrum_dict:
+            mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values()])
 
     mzs_all = np.concatenate(mzs_all).ravel()
 
