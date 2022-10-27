@@ -37,7 +37,7 @@ from mfe.from_txt import msi_from_txt, get_ref_peaks, create_feature_table
 spectra = msi_from_txt(da_exported_txt)
 
 # get the reference peaks, with a peak picking threshold of pth, and pth is a list
-ref = get_ref_peaks(spectra1, peak_th=pth)
+ref = get_ref_peaks(spectra, peak_th=pth)
 
 # create a feature table with the reference peaks
 feature_table = create_feature_table(spectra, ref, normalization='median')
