@@ -141,10 +141,11 @@ def cal_dispersion(matrix_consensus):
     return corr_disp
 
 
-def accum_w_h(accum_w, accum_h, matrix_w, matrix_h, *args):
+def accum_w_h(accum_w, accum_h, matrix_w, matrix_h, accum_time):
     """
 
     Args:
+        accum_time:
         accum_w:
         accum_h:
         matrix_w:
@@ -153,13 +154,7 @@ def accum_w_h(accum_w, accum_h, matrix_w, matrix_h, *args):
     Returns:
 
     """
-    accum_time = 30
     tol = 0.9
-    if len(args) != 0:
-        if max(args) > 1:
-            accum_time = max(args)
-        if min(args) < 1:
-            tol = min(args)
     corr = np.zeros([accum_w.shape[1], matrix_w.shape[1]])
     for col_m, col_n in itertools.product(range(accum_w.shape[1]), range(matrix_w.shape[1])):
         r_val, _ = pearsonr(accum_w[:, col_m], matrix_w[:, col_n])
