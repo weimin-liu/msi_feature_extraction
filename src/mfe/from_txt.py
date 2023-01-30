@@ -112,6 +112,29 @@ def msi_from_txt(raw_txt_path: str) -> dict:
     return results
 
 
+def msi_from_txts(txt_file_paths: typing.List[str]) -> dict:
+    """
+    convert the plain text files exported from Bruker DataAnalysis to a dictionary object, with x,
+    y as the key and spectrum as the value
+
+    Parameters:
+    --------
+
+        txt_file_paths: plain text files exported from Bruker DA software
+
+    Returns:
+    -------
+
+        A dictionary with [x, y] as keys and the corresponding spectrum as values
+    """
+    results = {}
+
+    for txt_file_path in txt_file_paths:
+
+        results.update(msi_from_txt(txt_file_path))
+
+    return results
+
 class Spectrum:
     """
     modified from https://raw.githubusercontent.com/francisbrochu/msvlm/master/msvlm/msspectrum
