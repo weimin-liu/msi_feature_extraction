@@ -43,7 +43,10 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     """
 
     if (str_x is None) & (str_y is None):
-        str_x = r'R00X(.*?)Y'
+
+        str_prefix = r'R(\d+)X'
+
+        str_x = r'R\d+X(.*?)Y'
 
         str_y = r'Y(.*?)$'
 
@@ -57,6 +60,10 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     spectrum = Spectrum(mz_val, intensity, mz_precision=MZ_PRECISION, metadata=spot_name)
 
+    prefix = re.findall(str_prefix, spot_name)[0]
+
+    prefix = int(prefix)
+
     x_loc = re.findall(str_x, spot_name)[0]
 
     x_loc = int(x_loc)
@@ -65,7 +72,7 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     y_loc = int(y_loc)
 
-    return (x_loc, y_loc), spectrum
+    return (prefix, x_loc, y_loc), spectrum
 
 
 def msi_from_txt(raw_txt_path: str) -> dict:
