@@ -625,9 +625,9 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
 
     err_table = pd.DataFrame(err_arr, columns=list(ref_peaks))
 
-    feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1]
+    feature_table['R'], feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1], spot[:, 2]
 
-    err_table['x'], err_table['y'] = spot[:, 0], spot[:, 1]
+    err_table['R'], err_table['x'], err_table['y'] = spot[:, 0], spot[:, 1], spot[:, 2]
 
     return feature_table, err_table
 
