@@ -311,7 +311,7 @@ class Spectrum:
         intensity_values = np.asarray(intensity_values)[sort_mz]
 
         # Round the mz values based on the mz precision
-        mz_values = np.asarray(np.round(mz_values, self._mz_precision), dtype=np.float)
+        mz_values = np.asarray(np.round(mz_values, self._mz_precision), dtype=float)
 
         # Contiguous mz values might now be equivalent. Combine their intensity values by taking
         # the sum.
