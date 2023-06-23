@@ -718,10 +718,10 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
                 mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values()])
     elif re.match('R\d+', on):
         if isinstance(spectrum_dict, dict):
-            mzs_all = [spec.mz_values for key, spec in spectrum_dict.items() if on in key]
+            mzs_all = [spec.mz_values for spec in spectrum_dict.values() if on in spec.metadata]
         elif isinstance(spectrum_dict, list):
             for spectrum_dict_item in spectrum_dict:
-                mzs_all.extend([spec.mz_values for key, spec in spectrum_dict_item.items() if on in key])
+                mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values() if on in spec.metadata])
     else:
         raise NotImplementedError(f'The value of on should be either "all" or "R\d+", but got {on}')
 
