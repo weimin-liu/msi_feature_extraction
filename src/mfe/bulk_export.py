@@ -1,7 +1,7 @@
 """
 this script is used for bulk exporting feature table from a directory of data analysis exports
 """
-from src.mfe import from_txt
+from .from_txt import msi_from_txts, get_ref_peaks, create_feature_table
 
 
 def get_txts(path: str):
@@ -69,15 +69,15 @@ def get_feature_table(txt, params=None):
 
     """
     # get the mfe dict
-    mfe_dict = from_txt.msi_from_txts(txt)
+    mfe_dict = msi_from_txts(txt)
     # find reference peaks
-    ref_peaks = from_txt.get_ref_peaks(mfe_dict, peak_th=params['peak_th'], on=params['on'])
+    ref_peaks = get_ref_peaks(mfe_dict, peak_th=params['peak_th'], on=params['on'])
     # find the peaks in the reference sample
     if len(params['peak_th']) > 1:
         print('Multiple peak_th values detected, will only run the pipeline on the first peak_th value')
-    feature_table, error_table = from_txt.create_feature_table(mfe_dict,
-                                                               ref_peaks[params['peak_th'][0]],
-                                                               normalization=params['normalization'])
+    feature_table, error_table = create_feature_table(mfe_dict,
+                                                      ref_peaks[params['peak_th'][0]],
+                                                      normalization=params['normalization'])
 
     return feature_table, error_table
 
