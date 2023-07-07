@@ -43,7 +43,10 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     """
 
     if (str_x is None) & (str_y is None):
-        str_x = r'R00X(.*?)Y'
+
+        str_prefix = r'R(\d+)X'
+
+        str_x = r'R\d+X(.*?)Y'
 
         str_y = r'Y(.*?)$'
 
@@ -57,6 +60,10 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     spectrum = Spectrum(mz_val, intensity, mz_precision=MZ_PRECISION, metadata=spot_name)
 
+    prefix = re.findall(str_prefix, spot_name)[0]
+
+    prefix = int(prefix)
+
     x_loc = re.findall(str_x, spot_name)[0]
 
     x_loc = int(x_loc)
@@ -65,7 +72,7 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     y_loc = int(y_loc)
 
-    return (x_loc, y_loc), spectrum
+    return (prefix, x_loc, y_loc), spectrum
 
 
 def msi_from_txt(raw_txt_path: str) -> dict:
@@ -111,6 +118,29 @@ def msi_from_txt(raw_txt_path: str) -> dict:
 
     return results
 
+
+def msi_from_txts(txt_file_paths: typing.List[str]) -> dict:
+    """
+    convert the plain text files exported from Bruker DataAnalysis to a dictionary object, with x,
+    y as the key and spectrum as the value
+
+    Parameters:
+    --------
+
+        txt_file_paths: plain text files exported from Bruker DA software
+
+    Returns:
+    -------
+
+        A dictionary with [x, y] as keys and the corresponding spectrum as values
+    """
+    results = {}
+
+    for txt_file_path in txt_file_paths:
+
+        results.update(msi_from_txt(txt_file_path))
+
+    return results
 
 class Spectrum:
     """
@@ -288,7 +318,7 @@ class Spectrum:
         intensity_values = np.asarray(intensity_values)[sort_mz]
 
         # Round the mz values based on the mz precision
-        mz_values = np.asarray(np.round(mz_values, self._mz_precision), dtype=np.float)
+        mz_values = np.asarray(np.round(mz_values, self._mz_precision), dtype=float)
 
         # Contiguous mz values might now be equivalent. Combine their intensity values by taking
         # the sum.
@@ -595,9 +625,9 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
 
     err_table = pd.DataFrame(err_arr, columns=list(ref_peaks))
 
-    feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1]
+    feature_table['R'], feature_table['x'], feature_table['y'] = spot[:, 0], spot[:, 1], spot[:, 2]
 
-    err_table['x'], err_table['y'] = spot[:, 0], spot[:, 1]
+    err_table['R'], err_table['x'], err_table['y'] = spot[:, 0], spot[:, 1], spot[:, 2]
 
     return feature_table, err_table
 
@@ -652,7 +682,7 @@ def find_peaks_in_bin(peak_th=None, ref_peaks=None, c_dist=None, peak_picking_me
     return ref_peaks
 
 
-def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence', peak_th=0.1):
+def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence', peak_th=0.1, on='all'):
     """
     walk through all spectrum and find reference peaks for peak bining using Kernel Density
     Estimation
@@ -671,17 +701,29 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
         https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html for
         more reference.
 
+        on: 'all' or 'R\d+', if 'all', then the peak_th will be applied to all slides, if 'R\d+', then
+        the peak_th will be applied to the slide with the name 'R\d+'. The default value is 'all'.
+
     Returns:
     --------
 
     """
     mzs_all = []
     # get all mzs from the sample and sort them
-    if isinstance(spectrum_dict, dict):
-        mzs_all = [spec.mz_values for spec in spectrum_dict.values()]
-    elif isinstance(spectrum_dict, list):
-        for spectrum_dict_item in spectrum_dict:
-            mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values()])
+    if on == 'all':
+        if isinstance(spectrum_dict, dict):
+            mzs_all = [spec.mz_values for spec in spectrum_dict.values()]
+        elif isinstance(spectrum_dict, list):
+            for spectrum_dict_item in spectrum_dict:
+                mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values()])
+    elif re.match('R\d+', on):
+        if isinstance(spectrum_dict, dict):
+            mzs_all = [spec.mz_values for spec in spectrum_dict.values() if on in spec.metadata]
+        elif isinstance(spectrum_dict, list):
+            for spectrum_dict_item in spectrum_dict:
+                mzs_all.extend([spec.mz_values for spec in spectrum_dict_item.values() if on in spec.metadata])
+    else:
+        raise NotImplementedError(f'The value of on should be either "all" or "R\d+", but got {on}')
 
     mzs_all = np.concatenate(mzs_all).ravel()
 
@@ -691,7 +733,7 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
 
     mz_bin = range(int(round(np.min(mzs_all), 0)), int(round(np.max(mzs_all), 0)))
 
-    print(f'Detecting reference peaks with peak prominence greater than {peak_th}')
+    print(f'Detecting reference peaks with peak prominence greater than {peak_th} ...')
     for i in range(len(mz_bin) - 1):
         left = np.searchsorted(mzs_all, mz_bin[i])
 
