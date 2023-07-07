@@ -54,7 +54,7 @@ def ask_for_params():
     if ',' in peak_th:
         peak_th = [float(x) for x in peak_th.split(',')]
     else:
-        peak_th = [peak_th]
+        peak_th = [float(peak_th)]
     params['peak_th'] = peak_th
 
     # Ask for normalization parameter
