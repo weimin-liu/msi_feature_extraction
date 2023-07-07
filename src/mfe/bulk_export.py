@@ -1,6 +1,8 @@
 """
 this script is used for bulk exporting feature table from a directory of data analysis exports
 """
+import os.path
+
 from .from_txt import msi_from_txts, get_ref_peaks, create_feature_table
 
 
@@ -29,6 +31,10 @@ def bulk_run(txts: dict, params: dict):
     :return: dictionary of measurement name and feature table
     """
     for measurement, txt in txts.items():
+        if len(txt) > 1:
+            txt = [os.path.join(measurement, f) for f in txt]
+        else:
+            txt = [os.path.join(measurement, txt[0])]
         feature_table, err_table = get_feature_table(txt, params)
         # save them to a csv file under  the same directory
         feature_table.to_csv(measurement + '_feature_table.csv')
@@ -44,7 +50,7 @@ def ask_for_params():
     params = {}
 
     # Ask for peak_th parameter
-    peak_th = input("Enter the peak threshold value (sep multiple values by ,: ")
+    peak_th = input("Enter the peak threshold value (sep multiple values by ,): ")
     if ',' in peak_th:
         peak_th = [float(x) for x in peak_th.split(',')]
     else:
