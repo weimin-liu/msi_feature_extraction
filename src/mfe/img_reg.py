@@ -57,7 +57,7 @@ def main():
     image = select_image()
     gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    cv2.namedWindow("image")
+    cv2.namedWindow("image",cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("image", coordinate_store.select_point)
 
     print("Please click on the image to select three corresponding points.")
