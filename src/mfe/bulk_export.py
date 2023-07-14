@@ -3,7 +3,29 @@ this script is used for bulk exporting feature table from a directory of data an
 """
 import os.path
 
-from .from_txt import msi_from_txts, get_ref_peaks, create_feature_table
+from flask import Flask, render_template, request, redirect
+
+from mfe.from_txt import msi_from_txts, get_ref_peaks, create_feature_table
+
+app = Flask(__name__)
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/process', methods=['POST'])
+def process():
+    root_dir = request.form['root_dir']
+    txts = get_txts(root_dir)
+    params = {
+        'peak_th': request.form['peak_th'],
+        'normalization': request.form['normalization'],
+        'on': request.form['on']
+    }
+    bulk_run(txts, params)
+    return redirect('/')
 
 
 def get_txts(path: str):
@@ -100,4 +122,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()  # pylint: disable=no-value-for-parameter
+    app.run()  # pylint: disable=no-value-for-parameter

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bulk Export Feature Table</title>
+</head>
+<body>
+    <h1>Bulk Export Feature Table</h1>
+    <form action="/process" method="POST">
+        <label for="root_dir">Root Directory:</label>
+        <input type="file" id="root_dir" name="root_dir" webkitdirectory required><br><br>
+
+        <label for="peak_th">Peak Picking Threshold:</label>
+        <input type="text" id="peak_th" name="peak_th" required><br><br>
+
+        <label for="normalization">Normalization Method (None or median):</label>
+        <input type="text" id="normalization" name="normalization" required><br><br>
+
+        <label for="on">On (Peak picking based on all slides or a single slide):</label>
+        <input type="text" id="on" name="on" required><br><br>
+
+        <input type="submit" value="Process">
+    </form>
+</body>
+</html>

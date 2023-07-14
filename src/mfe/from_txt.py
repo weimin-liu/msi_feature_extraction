@@ -733,7 +733,7 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
 
     mz_bin = range(int(round(np.min(mzs_all), 0)), int(round(np.max(mzs_all), 0)))
 
-    print(f'Detecting reference peaks with peak prominence greater than {peak_th} ...')
+    print(f'Detecting reference peaks with peak prominence greater than {peak_th} on {on}...')
     for i in range(len(mz_bin) - 1):
         left = np.searchsorted(mzs_all, mz_bin[i])
 
