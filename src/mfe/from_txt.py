@@ -54,7 +54,10 @@ def parse_da_export(line: str, str_x=None, str_y=None):
 
     value = np.array(line.split(";")[2:]).reshape(-1, 3)
 
-    mz_val = value[:, 0].astype(float)
+    try:
+        mz_val = value[:, 0].astype(float)
+    except ValueError:
+        print(f"Error in parsing the following line: {line}")
 
     intensity = value[:, 1].astype(float)
 
