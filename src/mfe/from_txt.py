@@ -2,12 +2,14 @@
 the main module to tackle plain text files exported from Data Analysis
 """
 import concurrent.futures
+import logging
 import math
 import re
 import typing
 from bisect import bisect
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -21,7 +23,7 @@ from scipy.sparse import csr_matrix, vstack
 MZ_PRECISION = 4
 
 
-def parse_da_export(line: str, str_x=None, str_y=None):
+def parse_da_export(line: str, str_x=None, str_y=None, min_int=10000, min_snr=1):
     """
     parse lines in the plain text file exported from Bruker Data Analysis. Format of the plain
     text file is as follows: each line corresponds to one spot on the slide, with its x,
@@ -43,7 +45,6 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     """
 
     if (str_x is None) & (str_y is None):
-
         str_prefix = r'R(\d+)X'
 
         str_x = r'R\d+X(.*?)Y'
@@ -57,9 +58,15 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     try:
         mz_val = value[:, 0].astype(float)
     except ValueError:
-        print(f"Error in parsing the following line: {line}")
+        logging.debug(f"Error in parsing the following line: {line}")
 
     intensity = value[:, 1].astype(float)
+
+    snr = value[:, 2].astype(float)
+
+    # thresholding the intensity and snr
+    mz_val = mz_val[(intensity > min_int) & (snr > min_snr)]
+    intensity = intensity[(intensity > min_int) & (snr > min_snr)]
 
     spectrum = Spectrum(mz_val, intensity, mz_precision=MZ_PRECISION, metadata=spot_name)
 
@@ -78,7 +85,7 @@ def parse_da_export(line: str, str_x=None, str_y=None):
     return (prefix, x_loc, y_loc), spectrum
 
 
-def msi_from_txt(raw_txt_path: str) -> dict:
+def msi_from_txt(raw_txt_path: str, min_int=10000, min_snr=1) -> dict:
     """
     convert the plain text file exported from Bruker DataAnalysis to a dictionary object, with x,
     y as the key and spectrum as the value
@@ -87,6 +94,8 @@ def msi_from_txt(raw_txt_path: str) -> dict:
     --------
 
         txt_file_path: plain text file exported from Bruker DA software
+        min_int: the minimum intensity
+        min_snr: the minimum signal-to-noise ratio
 
     Returns:
     -------
@@ -99,12 +108,15 @@ def msi_from_txt(raw_txt_path: str) -> dict:
 
     lines = lines[1:]
 
+    # pack the function with partial, using the min_int and min_snr as default arguments
+    parse_da_export_partial = partial(parse_da_export, min_int=min_int, min_snr=min_snr)
+
     with concurrent.futures.ProcessPoolExecutor() as executor:
 
         to_do = []
 
         for line in lines:
-            future = executor.submit(parse_da_export, line)
+            future = executor.submit(parse_da_export_partial, line)
 
             to_do.append(future)
 
@@ -140,10 +152,10 @@ def msi_from_txts(txt_file_paths: typing.List[str]) -> dict:
     results = {}
 
     for txt_file_path in txt_file_paths:
-
         results.update(msi_from_txt(txt_file_path))
 
     return results
+
 
 class Spectrum:
     """
@@ -349,7 +361,7 @@ class Spectrum:
         self._median_normalized_peaks_intensity = self._peaks_intensity / np.median(
             self._peaks_intensity)
         self._peaks = dict([(round(self._peaks_mz[i], self._mz_precision), self._peaks_intensity[i]) for i in
-             range(len(self._peaks_mz))])
+                            range(len(self._peaks_mz))])
 
         self._check_peaks_integrity()
 
@@ -421,9 +433,9 @@ class Spectrum:
         _, axis = plt.subplots()
         for i in range(len(self)):
             axis.plot([self.mz_values[i], self.mz_values[i]],
-                    [0, 100 * self.intensity_values[i] / np.max(self.
-                                                                intensity_values)], linewidth=0.3,
-                    color='black')
+                      [0, 100 * self.intensity_values[i] / np.max(self.
+                                                                  intensity_values)], linewidth=0.3,
+                      color='black')
         interval = (np.max(self.mz_values) - np.min(self.mz_values)) / 30
         min_mz = max(0, math.floor(self.mz_values[0] / interval - 1) * interval)
         max_mz = max(0, math.floor(self.mz_values[-1] / interval + 1) * interval)
@@ -656,10 +668,28 @@ def find_peaks(y_val, peak_picking_method=None, peak_th=None):
     return peaks
 
 
-def find_peaks_in_bin(peak_th=None, ref_peaks=None, c_dist=None, peak_picking_method=None):
+def number_of_members_in_peaks(peak: float, raw_values: np.ndarray, tol: float):
+    """
+    count the number of members in a peak with a given tolerance
+    Args:
+        peak: the centroid m/z of the peak
+        raw_values: all the m/z values
+        tol: the tolerance for the measurement error, in ppm
+
+    Returns:
+
+    """
+    peak_max = peak * (1 + tol * 1e-6)
+    peak_min = peak * (1 - tol * 1e-6)
+    return len(raw_values[(raw_values >= peak_min) & (raw_values <= peak_max)])
+
+
+def find_peaks_in_bin(peak_th=None, ref_peaks=None, c_dist=None, peak_picking_method=None, min_member=0.2, tol=10):
     """
 
     Args:
+        tol:
+        min_member:
         peak_th:
         ref_peaks:
         c_dist:
@@ -674,18 +704,21 @@ def find_peaks_in_bin(peak_th=None, ref_peaks=None, c_dist=None, peak_picking_me
 
     if isinstance(peak_th, float):
         peaks = find_peaks(y_val, peak_picking_method=peak_picking_method, peak_th=peak_th)
-        ref_peaks[peak_th].extend([round(x_val[i], 4) for i in peaks])
+
+        ref_peaks[peak_th].extend([round(x_val[i], 4) for i in peaks if
+                                   number_of_members_in_peaks(round(x_val[i], 4), c_dist, tol) >= min_member])
 
     elif isinstance(peak_th, list):
         for p_th in peak_th:
             peaks = find_peaks(y_val, peak_picking_method=peak_picking_method, peak_th=p_th)
-            ref_peaks[p_th].extend([round(x_val[i], 4) for i in peaks])
+            ref_peaks[p_th].extend([round(x_val[i], 4) for i in peaks if
+                                    number_of_members_in_peaks(round(x_val[i], 4), c_dist, tol) >= min_member])
     else:
         raise NotImplementedError
     return ref_peaks
 
 
-def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence', peak_th=0.1, on='all'):
+def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence', peak_th=0.1, min_member=0.2, tol=10, on='all'):
     """
     walk through all spectrum and find reference peaks for peak bining using Kernel Density
     Estimation
@@ -711,6 +744,13 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
     --------
 
     """
+    # convert min_member to number of member if it's a percentage
+    if min_member > 1:
+        min_member = int(min_member)
+    else:
+        min_member = int(min_member * len(spectrum_dict))
+    logging.debug(f'Using {min_member} as the minimum number of member for peak picking...')
+
     mzs_all = []
     # get all mzs from the sample and sort them
     if on == 'all':
@@ -736,7 +776,7 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
 
     mz_bin = range(int(round(np.min(mzs_all), 0)), int(round(np.max(mzs_all), 0)))
 
-    print(f'Detecting reference peaks with peak prominence greater than {peak_th} on {on}...')
+    logging.debug(f'Detecting reference peaks with peak prominence greater than {peak_th} on {on}...')
     for i in range(len(mz_bin) - 1):
         left = np.searchsorted(mzs_all, mz_bin[i])
 
@@ -757,7 +797,7 @@ def get_ref_peaks(spectrum_dict: dict or list, peak_picking_method='prominence',
 
     for c_dist in cluster:
         ref_peaks = find_peaks_in_bin(peak_th=peak_th, ref_peaks=ref_peaks, c_dist=c_dist,
-                                      peak_picking_method=peak_picking_method)
+                                      peak_picking_method=peak_picking_method, min_member=min_member, tol=tol)
 
     for key in list(ref_peaks.keys()):
         ref_peaks[key] = np.sort(ref_peaks[key])
