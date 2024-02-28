@@ -106,7 +106,8 @@ def msi_from_txt(raw_txt_path: str, min_int=10000, min_snr=1) -> dict:
 
         lines = raw_txt.readlines()
 
-    lines = lines[1:]
+    # only keep the lines that contain the spectrum, i.e., starts with 'R'
+    lines = [line for line in lines if line.startswith('R')]
 
     # pack the function with partial, using the min_int and min_snr as default arguments
     parse_da_export_partial = partial(parse_da_export, min_int=min_int, min_snr=min_snr)
