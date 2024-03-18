@@ -21,6 +21,7 @@ from scipy.sparse import csr_matrix, vstack
 
 # precision of mass-to-charge ratio to use before binning
 MZ_PRECISION = 4
+MAX_WORKERS = 32
 
 
 def parse_da_export(line: str, str_x=None, str_y=None, min_int=10000, min_snr=1):
@@ -112,7 +113,7 @@ def msi_from_txt(raw_txt_path: str, min_int=10000, min_snr=1) -> dict:
     # pack the function with partial, using the min_int and min_snr as default arguments
     parse_da_export_partial = partial(parse_da_export, min_int=min_int, min_snr=min_snr)
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
         to_do = []
 
@@ -603,7 +604,7 @@ def create_feature_table(spectrum_dict: dict, ref_peaks, tol=10, normalization='
             target_dict[res[0]] = res
         return target_dict
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
         print("Binning the spectrum...")
 
